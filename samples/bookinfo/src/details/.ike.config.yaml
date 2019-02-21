@@ -1,0 +1,8 @@
+develop:
+  run: ruby details.rb 9080
+  deployment: details-v1
+  port: 9080
+  no-build: true
+  watch: . 
+  
+#ike develop --no-build -p 9080 -d details-v1 -w details -r "ruby details/details.rb 9080" -s test

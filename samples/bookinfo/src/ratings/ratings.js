@@ -123,7 +123,7 @@ function getLocalReviews (productId) {
     id: productId,
     ratings: {
       'Reviewer1': 5,
-      'Reviewer2': 4
+      'Reviewer2': 2
     }
   }
 }

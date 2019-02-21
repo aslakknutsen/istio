@@ -1,0 +1,8 @@
+develop:
+  run: node ratings.js 9081
+  build: npm install -u
+  deployment: ratings-v1
+  port: 9081:9080
+  watch: . 
+  
+#ike develop --no-build -p 9081:9080 -d ratings-v1 -w ratings -r "node ratings/ratings.js 9081"

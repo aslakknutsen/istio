@@ -66,11 +66,11 @@ def get_book_details(id, headers)
 
     return {
         'id' => id,
-        'author': 'William Shakespeare',
+        'author': 'William Shakespeare the 3.',
         'year': 1595,
         'type' => 'paperback',
         'pages' => 200,
-        'publisher' => 'PublisherA',
+        'publisher' => 'Luke Strong 1',
         'language' => 'English',
         'ISBN-10' => '1234567890',
         'ISBN-13' => '123-1234567890'
