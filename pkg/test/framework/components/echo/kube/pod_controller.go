@@ -15,6 +15,7 @@
 package kube
 
 import (
+	"context"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -86,6 +87,12 @@ func (c *podController) Run(stop <-chan struct{}) {
 	go c.informer.Run(stop)
 	kube.WaitForCacheSync("pod controller", stop, c.informer.HasSynced)
 	c.q.Run(stop)
+}
+
+func (c *podController) RunWithContext(ctx context.Context) {
+	go c.informer.RunWithContext(ctx)
+	kube.WaitForCacheSync("pod controller", ctx.Done(), c.informer.HasSynced)
+	c.q.Run(ctx.Done())
 }
 
 func (c *podController) HasSynced() bool {
