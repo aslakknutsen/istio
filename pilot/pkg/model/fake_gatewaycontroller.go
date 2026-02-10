@@ -19,16 +19,29 @@ import (
 
 	"istio.io/istio/pilot/pkg/model/credentials"
 	"istio.io/istio/pkg/config"
+	kubegw "istio.io/istio/pkg/config/gateway/kube"
 	"istio.io/istio/pkg/util/sets"
 )
 
 type FakeController struct {
 	ConfigStoreController
 	GatewaysWithInferencePools sets.Set[types.NamespacedName]
+	ExtAuthzFiltersByGateway   map[types.NamespacedName][]kubegw.ExtAuthzHCMFilterConfig
 }
 
 func (f FakeController) HasInferencePool(gw types.NamespacedName) bool {
 	return f.GatewaysWithInferencePools.Contains(gw)
+}
+
+func (f FakeController) ExtAuthzFilters(gw types.NamespacedName) []kubegw.ExtAuthzHCMFilterConfig {
+	if f.ExtAuthzFiltersByGateway == nil {
+		return nil
+	}
+	return f.ExtAuthzFiltersByGateway[gw]
+}
+
+func (f FakeController) GatewayTargetedExtAuthzConfigs(_ types.NamespacedName) []kubegw.ExtAuthzRouteRuleConfig {
+	return nil
 }
 
 func (f FakeController) Reconcile(_ *PushContext) {}

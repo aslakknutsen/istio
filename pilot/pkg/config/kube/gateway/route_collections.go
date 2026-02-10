@@ -27,6 +27,7 @@ import (
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayalpha "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	istio "istio.io/api/networking/v1alpha3"
 	networkingclient "istio.io/client-go/pkg/apis/networking/v1"
@@ -83,11 +84,19 @@ func HTTPRouteCollection(
 			name string
 			cfg  *inferencePoolConfig
 		}{}
+		// Collect ext_authz configs per route rule name
+		extAuthzByRuleName := make(map[string][]kube.ExtAuthzRouteRuleConfig)
 		status := obj.Status.DeepCopy()
 		route := obj.Spec
 		parentStatus, parentRefs, meshResult, gwResult := computeRoute(ctx, obj, func(mesh bool, obj *gatewayv1.HTTPRoute) iter.Seq2[*istio.HTTPRoute, *ConfigError] {
 			return func(yield func(*istio.HTTPRoute, *ConfigError) bool) {
 				for n, r := range route.Rules {
+					// Resolve ext_authz configs for this rule
+					ruleName := ""
+					if r.Name != nil {
+						ruleName = string(*r.Name)
+					}
+
 					// split the rule to make sure each rule has up to one match
 					matches := slices.Reference(r.Matches)
 					if len(matches) == 0 {
@@ -103,6 +112,14 @@ func HTTPRouteCollection(
 								name string
 								cfg  *inferencePoolConfig
 							}{name: istioRoute.Name, cfg: ipCfg})
+						}
+						// Resolve ext_authz for the first match only (same rule produces same ext_authz)
+						if istioRoute != nil {
+							if _, resolved := extAuthzByRuleName[istioRoute.Name]; !resolved {
+								if extAuthzCfgs := resolveExtAuthzForHTTPRoute(ctx, obj, ruleName); len(extAuthzCfgs) > 0 {
+									extAuthzByRuleName[istioRoute.Name] = extAuthzCfgs
+								}
+							}
 						}
 						if !yield(istioRoute, configErr) {
 							return
@@ -183,6 +200,17 @@ func HTTPRouteCollection(
 				}
 				if len(currentRouteInferenceConfigs) > 0 {
 					extraData[constants.ConfigExtraPerRouteRuleInferencePoolConfigs] = currentRouteInferenceConfigs
+				}
+
+				// Populate ext_authz configs from XGatewayExternalService
+				currentRouteExtAuthzConfigs := make(map[string][]kube.ExtAuthzRouteRuleConfig)
+				for _, httpRule := range routes {
+					if cfgs, found := extAuthzByRuleName[httpRule.Name]; found {
+						currentRouteExtAuthzConfigs[httpRule.Name] = cfgs
+					}
+				}
+				if len(currentRouteExtAuthzConfigs) > 0 {
+					extraData[constants.ConfigExtraPerRouteRuleExtAuthzConfigs] = currentRouteExtAuthzConfigs
 				}
 
 				cfg := config.Config{
@@ -685,14 +713,15 @@ func (r RouteContext) LookupHostname(hostname string, namespace string) *model.S
 }
 
 type RouteContextInputs struct {
-	Grants          ReferenceGrants
-	RouteParents    RouteParents
-	DomainSuffix    string
-	Services        krt.Collection[*corev1.Service]
-	Namespaces      krt.Collection[*corev1.Namespace]
-	ServiceEntries  krt.Collection[*networkingclient.ServiceEntry]
-	InferencePools  krt.Collection[*inferencev1.InferencePool]
-	internalContext krt.RecomputeProtected[*atomic.Pointer[GatewayContext]]
+	Grants                  ReferenceGrants
+	RouteParents            RouteParents
+	DomainSuffix            string
+	Services                krt.Collection[*corev1.Service]
+	Namespaces              krt.Collection[*corev1.Namespace]
+	ServiceEntries          krt.Collection[*networkingclient.ServiceEntry]
+	InferencePools          krt.Collection[*inferencev1.InferencePool]
+	GatewayExternalServices krt.Collection[*gatewayx.XGatewayExternalService]
+	internalContext         krt.RecomputeProtected[*atomic.Pointer[GatewayContext]]
 }
 
 func (i RouteContextInputs) WithCtx(krtctx krt.HandlerContext) RouteContext {
@@ -823,6 +852,13 @@ func mergeHTTPRoutes(baseVirtualServices krt.Collection[RouteWithKey], opts ...k
 				}
 				base.Extra[constants.ConfigExtraPerRouteRuleInferencePoolConfigs] = newIPConfigs
 			}
+			if eaConfigs, ok := base.Extra[constants.ConfigExtraPerRouteRuleExtAuthzConfigs].(map[string][]kube.ExtAuthzRouteRuleConfig); ok {
+				newEAConfigs := make(map[string][]kube.ExtAuthzRouteRuleConfig, len(eaConfigs))
+				for k, v := range eaConfigs {
+					newEAConfigs[k] = v
+				}
+				base.Extra[constants.ConfigExtraPerRouteRuleExtAuthzConfigs] = newEAConfigs
+			}
 		}
 		for i, config := range configs[1:] {
 			thisVS := config.Spec.(*istio.VirtualService)
@@ -830,36 +866,49 @@ func mergeHTTPRoutes(baseVirtualServices krt.Collection[RouteWithKey], opts ...k
 			// append parents
 			base.Annotations[constants.InternalParentNames] = fmt.Sprintf("%s,%s",
 				base.Annotations[constants.InternalParentNames], config.Annotations[constants.InternalParentNames])
-			// Merge Extra field (especially for InferencePool configs)
+			// Merge Extra field (especially for InferencePool and ext_authz configs)
 			if base.Extra == nil && config.Extra != nil {
 				base.Extra = make(map[string]any)
 			}
 			if config.Extra != nil {
 				for k, v := range config.Extra {
-					// For non-InferencePool configs, keep the first value for stability
-					if k != constants.ConfigExtraPerRouteRuleInferencePoolConfigs {
+					switch k {
+					case constants.ConfigExtraPerRouteRuleInferencePoolConfigs:
+						// For InferencePool configs, merge the maps
+						baseMap, baseOk := base.Extra[k].(map[string]kube.InferencePoolRouteRuleConfig)
+						configMap, configOk := v.(map[string]kube.InferencePoolRouteRuleConfig)
+						if baseOk && configOk {
+							log.Debugf("Merging InferencePool configs: adding %d route configs from VirtualService %d to base (namespace=%s)",
+								len(configMap), i+1, config.Namespace)
+							for routeName, routeConfig := range configMap {
+								baseMap[routeName] = routeConfig
+							}
+						} else if configOk {
+							if _, exists := base.Extra[k]; !exists {
+								log.Debugf("Creating new InferencePool config map from VirtualService %d (namespace=%s)", i+1, config.Namespace)
+								base.Extra[k] = v
+							}
+						} else if !configOk {
+							log.Debugf("Skipping InferencePool config from VirtualService %d due to unexpected type (namespace=%s)", i+1, config.Namespace)
+						}
+					case constants.ConfigExtraPerRouteRuleExtAuthzConfigs:
+						// For ext_authz configs, merge the maps
+						baseMap, baseOk := base.Extra[k].(map[string][]kube.ExtAuthzRouteRuleConfig)
+						configMap, configOk := v.(map[string][]kube.ExtAuthzRouteRuleConfig)
+						if baseOk && configOk {
+							for routeName, routeConfig := range configMap {
+								baseMap[routeName] = routeConfig
+							}
+						} else if configOk {
+							if _, exists := base.Extra[k]; !exists {
+								base.Extra[k] = v
+							}
+						}
+					default:
+						// For other configs, keep the first value for stability
 						if _, exists := base.Extra[k]; !exists {
 							base.Extra[k] = v
 						}
-						continue
-					}
-					// For InferencePool configs, merge the maps
-					baseMap, baseOk := base.Extra[k].(map[string]kube.InferencePoolRouteRuleConfig)
-					configMap, configOk := v.(map[string]kube.InferencePoolRouteRuleConfig)
-					if baseOk && configOk {
-						log.Debugf("Merging InferencePool configs: adding %d route configs from VirtualService %d to base (namespace=%s)",
-							len(configMap), i+1, config.Namespace)
-						// Route names are composed of the HTTPRoute/VirtualService namespaced name so they can't possibly conflict
-						for routeName, routeConfig := range configMap {
-							baseMap[routeName] = routeConfig
-						}
-					} else if configOk {
-						if _, exists := base.Extra[k]; !exists {
-							log.Debugf("Creating new InferencePool config map from VirtualService %d (namespace=%s)", i+1, config.Namespace)
-							base.Extra[k] = v
-						}
-					} else if !configOk {
-						log.Debugf("Skipping InferencePool config from VirtualService %d due to unexpected type (namespace=%s)", i+1, config.Namespace)
 					}
 				}
 			}

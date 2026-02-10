@@ -25,6 +25,7 @@ import (
 	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	xdsfault "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/common/fault/v3"
 	cors "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/cors/v3"
+	extauthzhttp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_authz/v3"
 	extproc "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	xdshttpfault "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/fault/v3"
 	statefulsession "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/stateful_session/v3"
@@ -387,6 +388,7 @@ type RouteOptions struct {
 	LookupHash                func(*networking.HTTPRouteDestination) *networking.LoadBalancerSettings_ConsistentHashLB
 
 	InferencePoolExtensionRefs map[string]kube.InferencePoolRouteRuleConfig
+	ExtAuthzConfigs            map[string][]kube.ExtAuthzRouteRuleConfig
 }
 
 // BuildHTTPRoutesForVirtualService creates data plane HTTP routes from the virtual service spec.
@@ -544,6 +546,15 @@ func TranslateRoute(
 				},
 			},
 		})
+	}
+	// Set up ext_authz per-route config from XGatewayExternalService
+	if extAuthzCfgs, ok := opts.ExtAuthzConfigs[in.Name]; ok {
+		for _, cfg := range extAuthzCfgs {
+			if out.TypedPerFilterConfig == nil {
+				out.TypedPerFilterConfig = make(map[string]*anypb.Any)
+			}
+			out.TypedPerFilterConfig[cfg.FilterName] = BuildExtAuthzPerRouteAny(cfg)
+		}
 	}
 	if in.Redirect != nil {
 		ApplyRedirect(out, in.Redirect, listenPort, opts.IsTLS, model.UseGatewaySemantics(virtualService))
@@ -1664,4 +1675,55 @@ func CheckAndGetInferencePoolConfigs(virtualService config.Config) map[string]ku
 		}
 	}
 	return nil
+}
+
+// CheckAndGetExtAuthzConfigs extracts ext_authz configurations from a VirtualService's Extra field.
+// The expected structure in Extra is map[string][]kube.ExtAuthzRouteRuleConfig keyed by route rule name.
+func CheckAndGetExtAuthzConfigs(virtualService config.Config) map[string][]kube.ExtAuthzRouteRuleConfig {
+	if virtualService.Extra != nil {
+		if extAuthzConfigs, ok := virtualService.Extra[constants.ConfigExtraPerRouteRuleExtAuthzConfigs].(map[string][]kube.ExtAuthzRouteRuleConfig); ok {
+			return extAuthzConfigs
+		}
+	}
+	return nil
+}
+
+// BuildExtAuthzPerRouteAny builds the Envoy ExtAuthzPerRoute Any proto for a given
+// ExtAuthzRouteRuleConfig. Suitable for both Route-level and VirtualHost-level TypedPerFilterConfig.
+func BuildExtAuthzPerRouteAny(cfg kube.ExtAuthzRouteRuleConfig) *anypb.Any {
+	clusterName := model.BuildSubsetKey(model.TrafficDirectionOutbound, "", host.Name(cfg.Host), cfg.Port)
+	checkSettings := &extauthzhttp.CheckSettings{}
+	if len(cfg.Data) > 0 {
+		checkSettings.ContextExtensions = cfg.Data
+	}
+	if cfg.Protocol == "GRPC" {
+		checkSettings.ServiceOverride = &extauthzhttp.CheckSettings_GrpcService{
+			GrpcService: &core.GrpcService{
+				TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
+					EnvoyGrpc: &core.GrpcService_EnvoyGrpc{
+						ClusterName: clusterName,
+						Authority:   cfg.Host,
+					},
+				},
+				Timeout: durationpb.New(cfg.Timeout),
+			},
+		}
+	} else {
+		checkSettings.ServiceOverride = &extauthzhttp.CheckSettings_HttpService{
+			HttpService: &extauthzhttp.HttpService{
+				ServerUri: &core.HttpUri{
+					Uri:     fmt.Sprintf("http://%s", cfg.Host),
+					Timeout: durationpb.New(cfg.Timeout),
+					HttpUpstreamType: &core.HttpUri_Cluster{
+						Cluster: clusterName,
+					},
+				},
+			},
+		}
+	}
+	return protoconv.MessageToAny(&extauthzhttp.ExtAuthzPerRoute{
+		Override: &extauthzhttp.ExtAuthzPerRoute_CheckSettings{
+			CheckSettings: checkSettings,
+		},
+	})
 }

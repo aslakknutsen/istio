@@ -21,6 +21,7 @@ import (
 
 	envoycore "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoyroute "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
+	extauthzhttp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_authz/v3"
 	extproc "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	matcher "github.com/envoyproxy/go-control-plane/envoy/type/matcher/v3"
 	. "github.com/onsi/gomega"
@@ -1474,6 +1475,103 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		g.Expect(extProcPerRoute.GetOverrides().GetProcessingMode().GetResponseHeaderMode()).To(Equal(extproc.ProcessingMode_SEND))
 		g.Expect(extProcPerRoute.GetOverrides().GetFailureModeAllow().GetValue()).To(BeTrue())
 	})
+	t.Run("for virtual service with ext_authz GRPC config", func(t *testing.T) {
+		g := NewWithT(t)
+		cg := core.NewConfigGenTest(t, core.TestOptions{})
+
+		filterName := kube.ExtAuthzFilterName("default", "my-ext-authz")
+		routeOpts := buildRouteOpts(serviceRegistry, nil)
+		routeOpts.ExtAuthzConfigs = map[string][]kube.ExtAuthzRouteRuleConfig{
+			"routeA": {
+				{
+					FilterName: filterName,
+					Host:       "ext-authz.default.svc.cluster.local",
+					Port:       9001,
+					Protocol:   "GRPC",
+					Timeout:    5000000000, // 5s
+					Data:       map[string]string{"host": "myhost"},
+				},
+			},
+		}
+		routes, err := route.BuildHTTPRoutesForVirtualService(node(cg), virtualServicePlain, 8080, gatewayNames, routeOpts)
+		xdstest.ValidateRoutes(t, routes)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(routes[0].GetTypedPerFilterConfig()).To(HaveKey(filterName))
+		extAuthzPerRoute := new(extauthzhttp.ExtAuthzPerRoute)
+		if err := routes[0].GetTypedPerFilterConfig()[filterName].UnmarshalTo(extAuthzPerRoute); err != nil {
+			t.Fatalf("couldn't unmarshal ExtAuthzPerRoute: %v", err)
+		}
+		cs := extAuthzPerRoute.GetCheckSettings()
+		g.Expect(cs).NotTo(BeNil())
+		g.Expect(cs.GetContextExtensions()).To(HaveKeyWithValue("host", "myhost"))
+		g.Expect(cs.GetGrpcService().GetTargetSpecifier().(*envoycore.GrpcService_EnvoyGrpc_).EnvoyGrpc.GetClusterName()).To(
+			Equal("outbound|9001||ext-authz.default.svc.cluster.local"))
+		g.Expect(cs.GetGrpcService().GetTimeout().GetSeconds()).To(Equal(int64(5)))
+	})
+
+	t.Run("for virtual service with ext_authz HTTP config", func(t *testing.T) {
+		g := NewWithT(t)
+		cg := core.NewConfigGenTest(t, core.TestOptions{})
+
+		filterName := kube.ExtAuthzFilterName("default", "my-http-authz")
+		routeOpts := buildRouteOpts(serviceRegistry, nil)
+		routeOpts.ExtAuthzConfigs = map[string][]kube.ExtAuthzRouteRuleConfig{
+			"routeA": {
+				{
+					FilterName: filterName,
+					Host:       "ext-authz.default.svc.cluster.local",
+					Port:       8080,
+					Protocol:   "HTTP",
+					Timeout:    3000000000, // 3s
+				},
+			},
+		}
+		routes, err := route.BuildHTTPRoutesForVirtualService(node(cg), virtualServicePlain, 8080, gatewayNames, routeOpts)
+		xdstest.ValidateRoutes(t, routes)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(routes[0].GetTypedPerFilterConfig()).To(HaveKey(filterName))
+		extAuthzPerRoute := new(extauthzhttp.ExtAuthzPerRoute)
+		if err := routes[0].GetTypedPerFilterConfig()[filterName].UnmarshalTo(extAuthzPerRoute); err != nil {
+			t.Fatalf("couldn't unmarshal ExtAuthzPerRoute: %v", err)
+		}
+		cs := extAuthzPerRoute.GetCheckSettings()
+		g.Expect(cs).NotTo(BeNil())
+		g.Expect(cs.GetHttpService()).NotTo(BeNil())
+		g.Expect(cs.GetHttpService().GetServerUri().GetCluster()).To(
+			Equal("outbound|8080||ext-authz.default.svc.cluster.local"))
+		g.Expect(cs.GetHttpService().GetServerUri().GetTimeout().GetSeconds()).To(Equal(int64(3)))
+	})
+
+	t.Run("for virtual service with multiple ext_authz backends on same route", func(t *testing.T) {
+		g := NewWithT(t)
+		cg := core.NewConfigGenTest(t, core.TestOptions{})
+
+		filterA := kube.ExtAuthzFilterName("default", "authz-a")
+		filterB := kube.ExtAuthzFilterName("default", "authz-b")
+		routeOpts := buildRouteOpts(serviceRegistry, nil)
+		routeOpts.ExtAuthzConfigs = map[string][]kube.ExtAuthzRouteRuleConfig{
+			"routeA": {
+				{
+					FilterName: filterA,
+					Host:       "authz-a.default.svc.cluster.local",
+					Port:       9001,
+					Protocol:   "GRPC",
+				},
+				{
+					FilterName: filterB,
+					Host:       "authz-b.default.svc.cluster.local",
+					Port:       9002,
+					Protocol:   "GRPC",
+				},
+			},
+		}
+		routes, err := route.BuildHTTPRoutesForVirtualService(node(cg), virtualServicePlain, 8080, gatewayNames, routeOpts)
+		xdstest.ValidateRoutes(t, routes)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(routes[0].GetTypedPerFilterConfig()).To(HaveKey(filterA))
+		g.Expect(routes[0].GetTypedPerFilterConfig()).To(HaveKey(filterB))
+	})
+
 	t.Run("for virtualservices with with wildcard hosts outside of the serviceregistry (on port 80)", func(t *testing.T) {
 		g := NewWithT(t)
 		cg := core.NewConfigGenTest(t, core.TestOptions{

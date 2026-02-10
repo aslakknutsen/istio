@@ -30,8 +30,10 @@ import (
 	tls "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	"github.com/hashicorp/go-multierror"
 	"google.golang.org/protobuf/types/known/anypb"
+	"k8s.io/apimachinery/pkg/types"
 
 	extensions "istio.io/api/extensions/v1alpha1"
+	"istio.io/api/label"
 	meshconfig "istio.io/api/mesh/v1alpha1"
 	networking "istio.io/api/networking/v1alpha3"
 	"istio.io/istio/pilot/pkg/features"
@@ -45,6 +47,7 @@ import (
 	"istio.io/istio/pilot/pkg/util/protoconv"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/gateway"
+	kubegw "istio.io/istio/pkg/config/gateway/kube"
 	"istio.io/istio/pkg/config/host"
 	"istio.io/istio/pkg/config/protocol"
 	"istio.io/istio/pkg/config/security"
@@ -415,6 +418,16 @@ func (configgen *ConfigGeneratorImpl) buildGatewayHTTPRouteConfig(node *model.Pr
 	gatewayRoutes := make(map[string]map[string][]*route.Route)
 	gatewayVirtualServices := make(map[string][]*config.Config)
 	vHostDedupMap := make(map[host.Name]*route.VirtualHost)
+
+	// Resolve Gateway-targeted ext_authz configs (applied at VirtualHost level).
+	var gwExtAuthzConfigs []kubegw.ExtAuthzRouteRuleConfig
+	if kubeGwName, ok := node.Labels[label.IoK8sNetworkingGatewayGatewayName.Name]; ok {
+		gwNN := types.NamespacedName{Name: kubeGwName, Namespace: node.GetNamespace()}
+		if push.GatewayAPIController != nil {
+			gwExtAuthzConfigs = push.GatewayAPIController.GatewayTargetedExtAuthzConfigs(gwNN)
+		}
+	}
+
 	for _, server := range servers {
 		gatewayName := merged.GatewayNameForServer[server]
 		port := int(server.Port.Number)
@@ -450,6 +463,7 @@ func (configgen *ConfigGeneratorImpl) buildGatewayHTTPRouteConfig(node *model.Pr
 			}
 
 			infPoolConfigs := istio_route.CheckAndGetInferencePoolConfigs(*virtualService)
+			extAuthzConfigs := istio_route.CheckAndGetExtAuthzConfigs(*virtualService)
 
 			vskey := virtualService.Name + "/" + virtualService.Namespace
 
@@ -468,6 +482,7 @@ func (configgen *ConfigGeneratorImpl) buildGatewayHTTPRouteConfig(node *model.Pr
 						return hashByDestination[destination]
 					},
 					InferencePoolExtensionRefs: infPoolConfigs,
+					ExtAuthzConfigs:            extAuthzConfigs,
 				}
 				routes, err = istio_route.BuildHTTPRoutesForVirtualService(node, *virtualService, port, sets.New(gatewayName), opts)
 				if err != nil {
@@ -496,6 +511,10 @@ func (configgen *ConfigGeneratorImpl) buildGatewayHTTPRouteConfig(node *model.Pr
 							}
 							perRouteFilters[util.StatefulSessionFilter] = protoconv.MessageToAny(perRouteStatefulSession)
 						}
+					}
+					// Apply Gateway-targeted ext_authz at VirtualHost level so all routes inherit it.
+					for _, cfg := range gwExtAuthzConfigs {
+						perRouteFilters[cfg.FilterName] = istio_route.BuildExtAuthzPerRouteAny(cfg)
 					}
 					newVHost := &route.VirtualHost{
 						Name:    util.DomainName(string(hostname), port),

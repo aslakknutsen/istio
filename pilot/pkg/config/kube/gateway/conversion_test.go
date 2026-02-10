@@ -731,6 +731,12 @@ func TestConvertResources(t *testing.T) {
 			),
 		},
 		{name: "mix-backend-policy"},
+		{
+			name: "ext-authz",
+			validationIgnorer: crdvalidation.NewValidationIgnorer(
+				"default/ext-authz-svc",
+			),
+		},
 		{name: "listenerset"},
 		{name: "listenerset-cross-namespace"},
 		{name: "listenerset-same-name-different-ns"},
@@ -828,6 +834,7 @@ func setupClientCRDs(t *testing.T, kc kube.CLIClient) {
 		gvr.ServiceEntry,
 		gvr.XBackendTrafficPolicy,
 		gvr.BackendTLSPolicy,
+		gvr.XGatewayExternalService,
 		gvr.InferencePool,
 	} {
 		clienttest.MakeCRDWithAnnotations(t, kc, crd, map[string]string{

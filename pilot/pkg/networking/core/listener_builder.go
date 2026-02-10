@@ -20,6 +20,7 @@ import (
 	accesslog "github.com/envoyproxy/go-control-plane/envoy/config/accesslog/v3"
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
+	extauthzhttp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_authz/v3"
 	hcm "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	tcp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/tcp_proxy/v3"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -402,6 +403,17 @@ func (lb *ListenerBuilder) buildHTTPConnectionManager(httpOpts *httpListenerOpts
 		// Metadata exchange filter needs to be added before any other HTTP filters are added. This is done to
 		// ensure that mx filter comes before HTTP RBAC filter. This is related to https://github.com/istio/istio/issues/41066
 		filters = appendMxFilter(httpOpts, filters)
+		// Add GEP 5000 ext_authz filters (disabled by default, enabled per-route via TypedPerFilterConfig).
+		// One filter per XGatewayExternalService CR, ordered by priority, placed before the existing
+		// CUSTOM action ext_authz so its dynamic metadata is available downstream.
+		if kubeGwName, ok := lb.node.Labels[label.IoK8sNetworkingGatewayGatewayName.Name]; ok {
+			gwNN := types.NamespacedName{Name: kubeGwName, Namespace: lb.node.GetNamespace()}
+			if lb.push.GatewayAPIController != nil {
+				for _, cfg := range lb.push.GatewayAPIController.ExtAuthzFilters(gwNN) {
+					filters = append(filters, buildGEP5000ExtAuthzFilter(cfg.FilterName, cfg.FailOpen))
+				}
+			}
+		}
 		// TODO: how to deal with ext-authz? It will be in the ordering twice
 		filters = append(filters, lb.authzCustomBuilder.BuildHTTP(httpOpts.class)...)
 		filters = extension.PopAppendHTTP(filters, wasm, extensions.PluginPhase_AUTHN)
@@ -482,4 +494,34 @@ func appendMxFilter(httpOpts *httpListenerOpts, filters []*hcm.HttpFilter) []*hc
 		return append(filters, xdsfilters.SidecarOutboundMetadataFilterSkipHeaders)
 	}
 	return append(filters, xdsfilters.SidecarOutboundMetadataFilter)
+}
+
+// buildGEP5000ExtAuthzFilter creates a disabled-by-default ext_authz HTTP filter for GEP 5000.
+// Each XGatewayExternalService CR gets its own filter with a unique name derived from the CR
+// identity and its own failure_mode_allow setting. The filter is re-enabled per-route via
+// TypedPerFilterConfig with CheckSettings that specify the actual backend service.
+//
+// A placeholder GrpcService is required because Envoy instantiates the filter factory even
+// when Disabled is true, and panics if the services oneof is unset.
+// The per-route CheckSettings.ServiceOverride replaces this at runtime.
+func buildGEP5000ExtAuthzFilter(filterName string, failOpen bool) *hcm.HttpFilter {
+	return &hcm.HttpFilter{
+		Name:     filterName,
+		Disabled: true,
+		ConfigType: &hcm.HttpFilter_TypedConfig{
+			TypedConfig: protoconv.MessageToAny(&extauthzhttp.ExtAuthz{
+				TransportApiVersion: core.ApiVersion_V3,
+				FailureModeAllow:    failOpen,
+				Services: &extauthzhttp.ExtAuthz_GrpcService{
+					GrpcService: &core.GrpcService{
+						TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
+							EnvoyGrpc: &core.GrpcService_EnvoyGrpc{
+								ClusterName: "placeholder",
+							},
+						},
+					},
+				},
+			}),
+		},
+	}
 }

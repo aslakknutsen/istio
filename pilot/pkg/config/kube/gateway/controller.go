@@ -15,7 +15,10 @@
 package gateway
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
+	"time"
 
 	"go.uber.org/atomic"
 	corev1 "k8s.io/api/core/v1"
@@ -36,6 +39,7 @@ import (
 	"istio.io/istio/pkg/cluster"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/constants"
+	kubegw "istio.io/istio/pkg/config/gateway/kube"
 	"istio.io/istio/pkg/config/schema/collection"
 	"istio.io/istio/pkg/config/schema/collections"
 	"istio.io/istio/pkg/config/schema/gvk"
@@ -103,6 +107,9 @@ type Controller struct {
 	// If desired in the future, it could be.
 	outputs Outputs
 
+	// inputs holds a reference to the input collections for use in HasExtAuthz.
+	inputs Inputs
+
 	domainSuffix string // the domain suffix to use for generated resources
 
 	shadowServiceReconciler controllers.Queue
@@ -139,18 +146,19 @@ type Inputs struct {
 	Secrets    krt.Collection[*corev1.Secret]
 	ConfigMaps krt.Collection[*corev1.ConfigMap]
 
-	GatewayClasses       krt.Collection[*gatewayv1.GatewayClass]
-	Gateways             krt.Collection[*gatewayv1.Gateway]
-	HTTPRoutes           krt.Collection[*gatewayv1.HTTPRoute]
-	GRPCRoutes           krt.Collection[*gatewayv1.GRPCRoute]
-	TCPRoutes            krt.Collection[*gatewayalpha.TCPRoute]
-	TLSRoutes            krt.Collection[*gatewayalpha.TLSRoute]
-	ListenerSets         krt.Collection[*gatewayx.XListenerSet]
-	ReferenceGrants      krt.Collection[*gateway.ReferenceGrant]
-	BackendTrafficPolicy krt.Collection[*gatewayx.XBackendTrafficPolicy]
-	BackendTLSPolicies   krt.Collection[*gatewayv1.BackendTLSPolicy]
-	ServiceEntries       krt.Collection[*networkingclient.ServiceEntry]
-	InferencePools       krt.Collection[*inferencev1.InferencePool]
+	GatewayClasses          krt.Collection[*gatewayv1.GatewayClass]
+	Gateways                krt.Collection[*gatewayv1.Gateway]
+	HTTPRoutes              krt.Collection[*gatewayv1.HTTPRoute]
+	GRPCRoutes              krt.Collection[*gatewayv1.GRPCRoute]
+	TCPRoutes               krt.Collection[*gatewayalpha.TCPRoute]
+	TLSRoutes               krt.Collection[*gatewayalpha.TLSRoute]
+	ListenerSets            krt.Collection[*gatewayx.XListenerSet]
+	ReferenceGrants         krt.Collection[*gateway.ReferenceGrant]
+	BackendTrafficPolicy    krt.Collection[*gatewayx.XBackendTrafficPolicy]
+	BackendTLSPolicies      krt.Collection[*gatewayv1.BackendTLSPolicy]
+	GatewayExternalServices krt.Collection[*gatewayx.XGatewayExternalService]
+	ServiceEntries          krt.Collection[*networkingclient.ServiceEntry]
+	InferencePools          krt.Collection[*inferencev1.InferencePool]
 }
 
 var _ model.GatewayController = &Controller{}
@@ -211,12 +219,14 @@ func NewController(
 		inputs.TLSRoutes = buildClient[*gatewayalpha.TLSRoute](c, kc, gvr.TLSRoute, opts, "informer/TLSRoutes")
 		inputs.BackendTrafficPolicy = buildClient[*gatewayx.XBackendTrafficPolicy](c, kc, gvr.XBackendTrafficPolicy, opts, "informer/XBackendTrafficPolicy")
 		inputs.ListenerSets = buildClient[*gatewayx.XListenerSet](c, kc, gvr.XListenerSet, opts, "informer/XListenerSet")
+		inputs.GatewayExternalServices = buildClient[*gatewayx.XGatewayExternalService](c, kc, gvr.XGatewayExternalService, opts, "informer/XGatewayExternalService")
 	} else {
 		// If disabled, still build a collection but make it always empty
 		inputs.TCPRoutes = krt.NewStaticCollection[*gatewayalpha.TCPRoute](nil, nil, opts.WithName("disable/TCPRoutes")...)
 		inputs.TLSRoutes = krt.NewStaticCollection[*gatewayalpha.TLSRoute](nil, nil, opts.WithName("disable/TLSRoutes")...)
 		inputs.BackendTrafficPolicy = krt.NewStaticCollection[*gatewayx.XBackendTrafficPolicy](nil, nil, opts.WithName("disable/XBackendTrafficPolicy")...)
 		inputs.ListenerSets = krt.NewStaticCollection[*gatewayx.XListenerSet](nil, nil, opts.WithName("disable/XListenerSet")...)
+		inputs.GatewayExternalServices = krt.NewStaticCollection[*gatewayx.XGatewayExternalService](nil, nil, opts.WithName("disable/XGatewayExternalService")...)
 	}
 
 	if features.EnableGatewayAPIInferenceExtension {
@@ -302,14 +312,15 @@ func NewController(
 	RouteParents := BuildRouteParents(Gateways)
 
 	routeInputs := RouteContextInputs{
-		Grants:          ReferenceGrants,
-		RouteParents:    RouteParents,
-		DomainSuffix:    c.domainSuffix,
-		Services:        inputs.Services,
-		Namespaces:      inputs.Namespaces,
-		ServiceEntries:  inputs.ServiceEntries,
-		InferencePools:  inputs.InferencePools,
-		internalContext: c.gatewayContext,
+		Grants:                  ReferenceGrants,
+		RouteParents:            RouteParents,
+		DomainSuffix:            c.domainSuffix,
+		Services:                inputs.Services,
+		Namespaces:              inputs.Namespaces,
+		ServiceEntries:          inputs.ServiceEntries,
+		InferencePools:          inputs.InferencePools,
+		GatewayExternalServices: inputs.GatewayExternalServices,
+		internalContext:         c.gatewayContext,
 	}
 	tcpRoutes := TCPRouteCollection(
 		inputs.TCPRoutes,
@@ -369,6 +380,9 @@ func NewController(
 	GatewayFinalStatus := FinalGatewayStatusCollection(GatewaysStatus, RouteAttachments, RouteAttachmentsIndex, opts)
 	status.RegisterStatus(c.status, GatewayFinalStatus, GetStatus, c.tagWatcher.AccessUnprotected())
 
+	extSvcStatus := GatewayExternalServiceStatusCollection(inputs.GatewayExternalServices, inputs.Gateways, inputs.HTTPRoutes, opts)
+	status.RegisterStatus(c.status, extSvcStatus, GetStatus, c.tagWatcher.AccessUnprotected())
+
 	VirtualServices := krt.JoinCollection([]krt.Collection[config.Config]{
 		tcpRoutes.VirtualServices,
 		tlsRoutes.VirtualServices,
@@ -390,6 +404,7 @@ func NewController(
 		InferencePoolsByGateway: InferencePoolsByGateway,
 	}
 	c.outputs = outputs
+	c.inputs = inputs
 
 	handlers = append(handlers,
 		outputs.VirtualServices.RegisterBatch(pushXds(xdsUpdater,
@@ -631,6 +646,112 @@ func pushXds[T any](xds model.XDSUpdater, f func(T) model.ConfigKey) func(events
 
 func (c *Controller) HasInferencePool(gw types.NamespacedName) bool {
 	return len(c.outputs.InferencePoolsByGateway.Lookup(gw)) > 0
+}
+
+func (c *Controller) ExtAuthzFilters(gw types.NamespacedName) []kubegw.ExtAuthzHCMFilterConfig {
+	allExtSvcs := c.inputs.GatewayExternalServices.List()
+	var configs []kubegw.ExtAuthzHCMFilterConfig
+	for _, extSvc := range allExtSvcs {
+		if extSvc.Spec.Type != gatewayx.ExternalServiceTypeExtAuth {
+			continue
+		}
+		ref := extSvc.Spec.TargetRef
+		if string(ref.Group) != gatewayv1.GroupName {
+			continue
+		}
+		targeted := false
+		if string(ref.Kind) == "Gateway" {
+			targeted = extSvc.Namespace == gw.Namespace && string(ref.Name) == gw.Name
+		} else if string(ref.Kind) == "HTTPRoute" {
+			targeted = c.httpRouteAttachesToGateway(extSvc.Namespace, string(ref.Name), gw)
+		}
+		if !targeted {
+			continue
+		}
+		var failOpen bool
+		if extSvc.Spec.FailureMode != nil && *extSvc.Spec.FailureMode == gatewayx.FailureModeAllow {
+			failOpen = true
+		}
+		var priority int32
+		if extSvc.Spec.Priority != nil {
+			priority = *extSvc.Spec.Priority
+		}
+		configs = append(configs, kubegw.ExtAuthzHCMFilterConfig{
+			FilterName: kubegw.ExtAuthzFilterName(extSvc.Namespace, extSvc.Name),
+			FailOpen:   failOpen,
+			Priority:   priority,
+		})
+	}
+	slices.SortFunc(configs, func(a, b kubegw.ExtAuthzHCMFilterConfig) int {
+		if c := cmp.Compare(a.Priority, b.Priority); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.FilterName, b.FilterName)
+	})
+	return configs
+}
+
+func (c *Controller) GatewayTargetedExtAuthzConfigs(gw types.NamespacedName) []kubegw.ExtAuthzRouteRuleConfig {
+	allExtSvcs := c.inputs.GatewayExternalServices.List()
+	var configs []kubegw.ExtAuthzRouteRuleConfig
+	for _, extSvc := range allExtSvcs {
+		if extSvc.Spec.Type != gatewayx.ExternalServiceTypeExtAuth {
+			continue
+		}
+		ref := extSvc.Spec.TargetRef
+		if string(ref.Group) != gatewayv1.GroupName || string(ref.Kind) != "Gateway" {
+			continue
+		}
+		if extSvc.Namespace != gw.Namespace || string(ref.Name) != gw.Name {
+			continue
+		}
+		var timeout time.Duration
+		if extSvc.Spec.Timeout != nil {
+			d, err := time.ParseDuration(string(*extSvc.Spec.Timeout))
+			if err == nil {
+				timeout = d
+			}
+		}
+		var priority int32
+		if extSvc.Spec.Priority != nil {
+			priority = *extSvc.Spec.Priority
+		}
+		configs = append(configs, kubegw.ExtAuthzRouteRuleConfig{
+			FilterName: kubegw.ExtAuthzFilterName(extSvc.Namespace, extSvc.Name),
+			Host:       string(extSvc.Spec.Endpoint.Host),
+			Port:       int(extSvc.Spec.Endpoint.Port),
+			Protocol:   string(extSvc.Spec.Endpoint.Protocol),
+			Timeout:    timeout,
+			Priority:   priority,
+			Data:       extSvc.Spec.Data,
+		})
+	}
+	slices.SortFunc(configs, func(a, b kubegw.ExtAuthzRouteRuleConfig) int {
+		if c := cmp.Compare(a.Priority, b.Priority); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.FilterName, b.FilterName)
+	})
+	return configs
+}
+
+// httpRouteAttachesToGateway checks whether the named HTTPRoute has a parentRef pointing to the given gateway.
+func (c *Controller) httpRouteAttachesToGateway(routeNamespace, routeName string, gw types.NamespacedName) bool {
+	for _, hr := range c.inputs.HTTPRoutes.List() {
+		if hr.Namespace != routeNamespace || hr.Name != routeName {
+			continue
+		}
+		for _, ref := range hr.Spec.ParentRefs {
+			refNs := routeNamespace
+			if ref.Namespace != nil {
+				refNs = string(*ref.Namespace)
+			}
+			if string(ref.Name) == gw.Name && refNs == gw.Namespace {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (c *Controller) inRevision(obj any) bool {

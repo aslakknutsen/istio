@@ -2635,6 +2635,8 @@ func GetStatus[I, IS any](spec I) IS {
 		return any(t.Status).(IS)
 	case *gatewayx.XBackendTrafficPolicy:
 		return any(t.Status).(IS)
+	case *gatewayx.XGatewayExternalService:
+		return any(t.Status).(IS)
 	case *k8s.BackendTLSPolicy:
 		return any(t.Status).(IS)
 	case *gatewayx.XListenerSet:

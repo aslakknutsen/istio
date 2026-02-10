@@ -42,6 +42,7 @@ import (
 	"istio.io/istio/pkg/cluster"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/constants"
+	kubegw "istio.io/istio/pkg/config/gateway/kube"
 	"istio.io/istio/pkg/config/host"
 	"istio.io/istio/pkg/config/mesh"
 	"istio.io/istio/pkg/config/mesh/meshwatcher"
@@ -1079,6 +1080,16 @@ type GatewayController interface {
 	// For example, for resourceName of `kubernetes-gateway://ns-name/secret-name` and namespace of `ingress-ns`,
 	// this would return true only if there was a policy allowing `ingress-ns` to access Secrets in the `ns-name` namespace.
 	SecretAllowed(ourKind config.GroupVersionKind, resourceName string, namespace string) bool
+	// ExtAuthzFilters returns HCM-level ext_authz filter configs for
+	// XGatewayExternalService resources of type ExtAuth targeting this gateway.
+	// Each CR gets a unique filter with its own failure mode and priority.
+	// Results are sorted by priority (lower first). Returns nil if none.
+	ExtAuthzFilters(types.NamespacedName) []kubegw.ExtAuthzHCMFilterConfig
+	// GatewayTargetedExtAuthzConfigs returns per-route ext_authz configs for
+	// XGatewayExternalService resources that directly target this gateway
+	// (targetRef.kind: Gateway). These are applied at the VirtualHost level
+	// so that all routes on the gateway inherit the ext_authz policy.
+	GatewayTargetedExtAuthzConfigs(types.NamespacedName) []kubegw.ExtAuthzRouteRuleConfig
 }
 
 // OutboundListenerClass is a helper to turn a NodeType for outbound to a ListenerClass.

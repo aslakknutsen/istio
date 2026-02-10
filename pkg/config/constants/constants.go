@@ -223,4 +223,6 @@ const (
 
 	// TODO: think about a better name?
 	ConfigExtraPerRouteRuleInferencePoolConfigs = "perRouteRuleInferencePoolConfigs"
+
+	ConfigExtraPerRouteRuleExtAuthzConfigs = "perRouteRuleExtAuthzConfigs"
 )
