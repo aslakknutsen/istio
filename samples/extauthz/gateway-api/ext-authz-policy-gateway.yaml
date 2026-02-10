@@ -1,0 +1,21 @@
+# XGatewayExternalService targeting the Gateway.
+# Applies ext_authz to all routes on the gateway.
+# The ext-authz sample server allows requests with header "x-ext-authz: allow"
+# and denies everything else.
+apiVersion: gateway.networking.x-k8s.io/v1alpha1
+kind: XGatewayExternalService
+metadata:
+  name: ext-authz-policy-gw
+spec:
+  type: ExtAuth
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: ext-authz-gateway
+  endpoint:
+    # The ext-authz sample server from samples/extauthz/ext-authz.yaml
+    host: ext-authz.default.svc.cluster.local
+    port: 9000
+    protocol: GRPC
+  failureMode: Deny
+  timeout: 5s

@@ -1,0 +1,53 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ext-authz-gateway
+spec:
+  gatewayClassName: istio
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httpbin-route
+spec:
+  parentRefs:
+  - name: ext-authz-gateway
+  hostnames:
+  - "httpbin.example.com"
+  rules:
+  - name: main
+    matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: httpbin
+      port: 80
+---
+# Second HTTPRoute on the same gateway, NOT covered by the ext-authz policy.
+# Use this to verify that ext_authz only applies to httpbin-route.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httpbin-noauth
+spec:
+  parentRefs:
+  - name: ext-authz-gateway
+  hostnames:
+  - "noauth.example.com"
+  rules:
+  - name: main
+    matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: httpbin
+      port: 80
