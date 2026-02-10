@@ -146,6 +146,8 @@ func GetWriteClient[T runtime.Object](c ClientGetter, namespace string) ktypes.W
 		return c.Istio().NetworkingV1().WorkloadGroups(namespace).(ktypes.WriteAPI[T])
 	case *sigsk8siogatewayapiapisxv1alpha1.XBackendTrafficPolicy:
 		return c.GatewayAPI().ExperimentalV1alpha1().XBackendTrafficPolicies(namespace).(ktypes.WriteAPI[T])
+	case *sigsk8siogatewayapiapisxv1alpha1.XGatewayExternalService:
+		return c.GatewayAPI().ExperimentalV1alpha1().XGatewayExternalServices(namespace).(ktypes.WriteAPI[T])
 	case *sigsk8siogatewayapiapisxv1alpha1.XListenerSet:
 		return c.GatewayAPI().ExperimentalV1alpha1().XListenerSets(namespace).(ktypes.WriteAPI[T])
 	default:
@@ -249,6 +251,8 @@ func GetClient[T, TL runtime.Object](c ClientGetter, namespace string) ktypes.Re
 		return c.Istio().NetworkingV1().WorkloadGroups(namespace).(ktypes.ReadWriteAPI[T, TL])
 	case *sigsk8siogatewayapiapisxv1alpha1.XBackendTrafficPolicy:
 		return c.GatewayAPI().ExperimentalV1alpha1().XBackendTrafficPolicies(namespace).(ktypes.ReadWriteAPI[T, TL])
+	case *sigsk8siogatewayapiapisxv1alpha1.XGatewayExternalService:
+		return c.GatewayAPI().ExperimentalV1alpha1().XGatewayExternalServices(namespace).(ktypes.ReadWriteAPI[T, TL])
 	case *sigsk8siogatewayapiapisxv1alpha1.XListenerSet:
 		return c.GatewayAPI().ExperimentalV1alpha1().XListenerSets(namespace).(ktypes.ReadWriteAPI[T, TL])
 	default:
@@ -352,6 +356,8 @@ func gvrToObject(g schema.GroupVersionResource) runtime.Object {
 		return &apiistioioapinetworkingv1.WorkloadGroup{}
 	case gvr.XBackendTrafficPolicy:
 		return &sigsk8siogatewayapiapisxv1alpha1.XBackendTrafficPolicy{}
+	case gvr.XGatewayExternalService:
+		return &sigsk8siogatewayapiapisxv1alpha1.XGatewayExternalService{}
 	case gvr.XListenerSet:
 		return &sigsk8siogatewayapiapisxv1alpha1.XListenerSet{}
 	default:
@@ -692,6 +698,13 @@ func getInformerFiltered(c ClientGetter, opts ktypes.InformerOptions, g schema.G
 		}
 		w = func(options metav1.ListOptions) (watch.Interface, error) {
 			return c.GatewayAPI().ExperimentalV1alpha1().XBackendTrafficPolicies(opts.Namespace).Watch(context.Background(), options)
+		}
+	case gvr.XGatewayExternalService:
+		l = func(options metav1.ListOptions) (runtime.Object, error) {
+			return c.GatewayAPI().ExperimentalV1alpha1().XGatewayExternalServices(opts.Namespace).List(context.Background(), options)
+		}
+		w = func(options metav1.ListOptions) (watch.Interface, error) {
+			return c.GatewayAPI().ExperimentalV1alpha1().XGatewayExternalServices(opts.Namespace).Watch(context.Background(), options)
 		}
 	case gvr.XListenerSet:
 		l = func(options metav1.ListOptions) (runtime.Object, error) {

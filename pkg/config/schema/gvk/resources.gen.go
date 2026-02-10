@@ -86,6 +86,7 @@ var (
 	WorkloadGroup_v1alpha3         = config.GroupVersionKind{Group: "networking.istio.io", Version: "v1alpha3", Kind: "WorkloadGroup"}
 	WorkloadGroup_v1beta1          = config.GroupVersionKind{Group: "networking.istio.io", Version: "v1beta1", Kind: "WorkloadGroup"}
 	XBackendTrafficPolicy          = config.GroupVersionKind{Group: "gateway.networking.x-k8s.io", Version: "v1alpha1", Kind: "XBackendTrafficPolicy"}
+	XGatewayExternalService        = config.GroupVersionKind{Group: "gateway.networking.x-k8s.io", Version: "v1alpha1", Kind: "XGatewayExternalService"}
 	XListenerSet                   = config.GroupVersionKind{Group: "gateway.networking.x-k8s.io", Version: "v1alpha1", Kind: "XListenerSet"}
 )
 
@@ -242,6 +243,8 @@ func ToGVR(g config.GroupVersionKind) (schema.GroupVersionResource, bool) {
 		return gvr.WorkloadGroup_v1beta1, true
 	case XBackendTrafficPolicy:
 		return gvr.XBackendTrafficPolicy, true
+	case XGatewayExternalService:
+		return gvr.XGatewayExternalService, true
 	case XListenerSet:
 		return gvr.XListenerSet, true
 	}
@@ -349,6 +352,8 @@ func ToKind(g config.GroupVersionKind) (kind.Kind, bool) {
 		return kind.WorkloadGroup, true
 	case XBackendTrafficPolicy:
 		return kind.XBackendTrafficPolicy, true
+	case XGatewayExternalService:
+		return kind.XGatewayExternalService, true
 	case XListenerSet:
 		return kind.XListenerSet, true
 	}
@@ -475,6 +480,8 @@ func FromGVR(g schema.GroupVersionResource) (config.GroupVersionKind, bool) {
 		return WorkloadGroup, true
 	case gvr.XBackendTrafficPolicy:
 		return XBackendTrafficPolicy, true
+	case gvr.XGatewayExternalService:
+		return XGatewayExternalService, true
 	case gvr.XListenerSet:
 		return XListenerSet, true
 	}
@@ -592,6 +599,8 @@ func KebabKind(k string) string {
 		return "workload-group"
 	case "XBackendTrafficPolicy":
 		return "x-backend-traffic-policy"
+	case "XGatewayExternalService":
+		return "x-gateway-external-service"
 	case "XListenerSet":
 		return "x-listener-set"
 	}

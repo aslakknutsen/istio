@@ -172,6 +172,11 @@ func create(c kube.Client, cfg config.Config, objMeta metav1.ObjectMeta) (metav1
 			ObjectMeta: objMeta,
 			Spec:       *(cfg.Spec.(*sigsk8siogatewayapiapisxv1alpha1.BackendTrafficPolicySpec)),
 		}, metav1.CreateOptions{})
+	case gvk.XGatewayExternalService:
+		return c.GatewayAPI().ExperimentalV1alpha1().XGatewayExternalServices(cfg.Namespace).Create(context.TODO(), &sigsk8siogatewayapiapisxv1alpha1.XGatewayExternalService{
+			ObjectMeta: objMeta,
+			Spec:       *(cfg.Spec.(*sigsk8siogatewayapiapisxv1alpha1.GatewayExternalServiceSpec)),
+		}, metav1.CreateOptions{})
 	case gvk.XListenerSet:
 		return c.GatewayAPI().ExperimentalV1alpha1().XListenerSets(cfg.Namespace).Create(context.TODO(), &sigsk8siogatewayapiapisxv1alpha1.XListenerSet{
 			ObjectMeta: objMeta,
@@ -309,6 +314,11 @@ func update(c kube.Client, cfg config.Config, objMeta metav1.ObjectMeta) (metav1
 			ObjectMeta: objMeta,
 			Spec:       *(cfg.Spec.(*sigsk8siogatewayapiapisxv1alpha1.BackendTrafficPolicySpec)),
 		}, metav1.UpdateOptions{})
+	case gvk.XGatewayExternalService:
+		return c.GatewayAPI().ExperimentalV1alpha1().XGatewayExternalServices(cfg.Namespace).Update(context.TODO(), &sigsk8siogatewayapiapisxv1alpha1.XGatewayExternalService{
+			ObjectMeta: objMeta,
+			Spec:       *(cfg.Spec.(*sigsk8siogatewayapiapisxv1alpha1.GatewayExternalServiceSpec)),
+		}, metav1.UpdateOptions{})
 	case gvk.XListenerSet:
 		return c.GatewayAPI().ExperimentalV1alpha1().XListenerSets(cfg.Namespace).Update(context.TODO(), &sigsk8siogatewayapiapisxv1alpha1.XListenerSet{
 			ObjectMeta: objMeta,
@@ -443,6 +453,11 @@ func updateStatus(c kube.Client, cfg config.Config, objMeta metav1.ObjectMeta) (
 		}, metav1.UpdateOptions{})
 	case gvk.XBackendTrafficPolicy:
 		return c.GatewayAPI().ExperimentalV1alpha1().XBackendTrafficPolicies(cfg.Namespace).UpdateStatus(context.TODO(), &sigsk8siogatewayapiapisxv1alpha1.XBackendTrafficPolicy{
+			ObjectMeta: objMeta,
+			Status:     *(cfg.Status.(*sigsk8siogatewayapiapisxv1alpha1.PolicyStatus)),
+		}, metav1.UpdateOptions{})
+	case gvk.XGatewayExternalService:
+		return c.GatewayAPI().ExperimentalV1alpha1().XGatewayExternalServices(cfg.Namespace).UpdateStatus(context.TODO(), &sigsk8siogatewayapiapisxv1alpha1.XGatewayExternalService{
 			ObjectMeta: objMeta,
 			Status:     *(cfg.Status.(*sigsk8siogatewayapiapisxv1alpha1.PolicyStatus)),
 		}, metav1.UpdateOptions{})
@@ -836,6 +851,21 @@ func patch(c kube.Client, orig config.Config, origMeta metav1.ObjectMeta, mod co
 		}
 		return c.GatewayAPI().ExperimentalV1alpha1().XBackendTrafficPolicies(orig.Namespace).
 			Patch(context.TODO(), orig.Name, typ, patchBytes, metav1.PatchOptions{FieldManager: "pilot-discovery"})
+	case gvk.XGatewayExternalService:
+		oldRes := &sigsk8siogatewayapiapisxv1alpha1.XGatewayExternalService{
+			ObjectMeta: origMeta,
+			Spec:       *(orig.Spec.(*sigsk8siogatewayapiapisxv1alpha1.GatewayExternalServiceSpec)),
+		}
+		modRes := &sigsk8siogatewayapiapisxv1alpha1.XGatewayExternalService{
+			ObjectMeta: modMeta,
+			Spec:       *(mod.Spec.(*sigsk8siogatewayapiapisxv1alpha1.GatewayExternalServiceSpec)),
+		}
+		patchBytes, err := genPatchBytes(oldRes, modRes, typ)
+		if err != nil {
+			return nil, err
+		}
+		return c.GatewayAPI().ExperimentalV1alpha1().XGatewayExternalServices(orig.Namespace).
+			Patch(context.TODO(), orig.Name, typ, patchBytes, metav1.PatchOptions{FieldManager: "pilot-discovery"})
 	case gvk.XListenerSet:
 		oldRes := &sigsk8siogatewayapiapisxv1alpha1.XListenerSet{
 			ObjectMeta: origMeta,
@@ -912,6 +942,8 @@ func delete(c kube.Client, typ config.GroupVersionKind, name, namespace string, 
 		return c.Istio().NetworkingV1().WorkloadGroups(namespace).Delete(context.TODO(), name, deleteOptions)
 	case gvk.XBackendTrafficPolicy:
 		return c.GatewayAPI().ExperimentalV1alpha1().XBackendTrafficPolicies(namespace).Delete(context.TODO(), name, deleteOptions)
+	case gvk.XGatewayExternalService:
+		return c.GatewayAPI().ExperimentalV1alpha1().XGatewayExternalServices(namespace).Delete(context.TODO(), name, deleteOptions)
 	case gvk.XListenerSet:
 		return c.GatewayAPI().ExperimentalV1alpha1().XListenerSets(namespace).Delete(context.TODO(), name, deleteOptions)
 	default:
@@ -1781,6 +1813,25 @@ var translationMap = map[config.GroupVersionKind]func(r runtime.Object) config.C
 		return config.Config{
 			Meta: config.Meta{
 				GroupVersionKind:  gvk.XBackendTrafficPolicy,
+				Name:              obj.Name,
+				Namespace:         obj.Namespace,
+				Labels:            obj.Labels,
+				Annotations:       obj.Annotations,
+				ResourceVersion:   obj.ResourceVersion,
+				CreationTimestamp: obj.CreationTimestamp.Time,
+				OwnerReferences:   obj.OwnerReferences,
+				UID:               string(obj.UID),
+				Generation:        obj.Generation,
+			},
+			Spec:   &obj.Spec,
+			Status: &obj.Status,
+		}
+	},
+	gvk.XGatewayExternalService: func(r runtime.Object) config.Config {
+		obj := r.(*sigsk8siogatewayapiapisxv1alpha1.XGatewayExternalService)
+		return config.Config{
+			Meta: config.Meta{
+				GroupVersionKind:  gvk.XGatewayExternalService,
 				Name:              obj.Name,
 				Namespace:         obj.Namespace,
 				Labels:            obj.Labels,

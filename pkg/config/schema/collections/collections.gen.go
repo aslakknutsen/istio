@@ -831,6 +831,21 @@ var (
 		ValidateProto: validation.EmptyValidate,
 	}.MustBuild()
 
+	XGatewayExternalService = resource.Builder{
+		Identifier: "XGatewayExternalService",
+		Group:      "gateway.networking.x-k8s.io",
+		Kind:       "XGatewayExternalService",
+		Plural:     "xgatewayexternalservices",
+		Version:    "v1alpha1",
+		Proto:      "k8s.io.gateway_api.apix.v1alpha1.GatewayExternalServiceSpec", StatusProto: "PolicyStatus",
+		ReflectType: reflect.TypeOf(&sigsk8siogatewayapiapisxv1alpha1.GatewayExternalServiceSpec{}).Elem(), StatusType: reflect.TypeOf(&sigsk8siogatewayapiapisxv1alpha1.PolicyStatus{}).Elem(),
+		ProtoPackage: "sigs.k8s.io/gateway-api/apisx/v1alpha1", StatusPackage: "sigs.k8s.io/gateway-api/apisx/v1alpha1",
+		ClusterScoped: false,
+		Synthetic:     false,
+		Builtin:       false,
+		ValidateProto: validation.EmptyValidate,
+	}.MustBuild()
+
 	XListenerSet = resource.Builder{
 		Identifier: "XListenerSet",
 		Group:      "gateway.networking.x-k8s.io",
@@ -897,6 +912,7 @@ var (
 		MustAdd(WorkloadEntry).
 		MustAdd(WorkloadGroup).
 		MustAdd(XBackendTrafficPolicy).
+		MustAdd(XGatewayExternalService).
 		MustAdd(XListenerSet).
 		Build()
 
@@ -935,6 +951,7 @@ var (
 		MustAdd(UDPRoute).
 		MustAdd(ValidatingWebhookConfiguration).
 		MustAdd(XBackendTrafficPolicy).
+		MustAdd(XGatewayExternalService).
 		MustAdd(XListenerSet).
 		Build()
 
@@ -982,6 +999,7 @@ var (
 			MustAdd(WorkloadEntry).
 			MustAdd(WorkloadGroup).
 			MustAdd(XBackendTrafficPolicy).
+			MustAdd(XGatewayExternalService).
 			MustAdd(XListenerSet).
 			Build()
 
