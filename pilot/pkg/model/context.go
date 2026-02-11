@@ -1090,6 +1090,12 @@ type GatewayController interface {
 	// (targetRef.kind: Gateway). These are applied at the VirtualHost level
 	// so that all routes on the gateway inherit the ext_authz policy.
 	GatewayTargetedExtAuthzConfigs(types.NamespacedName) []kubegw.ExtAuthzRouteRuleConfig
+	// RateLimitFilters returns HCM-level ratelimit filter configs for
+	// XGatewayExternalService resources of type RateLimit targeting this gateway.
+	RateLimitFilters(types.NamespacedName) []kubegw.RateLimitHCMFilterConfig
+	// GatewayTargetedRateLimitConfigs returns per-route ratelimit configs for
+	// XGatewayExternalService resources of type RateLimit that directly target this gateway.
+	GatewayTargetedRateLimitConfigs(types.NamespacedName) []kubegw.RateLimitRouteRuleConfig
 }
 
 // OutboundListenerClass is a helper to turn a NodeType for outbound to a ListenerClass.

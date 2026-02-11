@@ -1,0 +1,20 @@
+# XGatewayExternalService of type RateLimit targeting the Gateway.
+# All routes attached to the gateway inherit the rate limit policy.
+apiVersion: gateway.networking.x-k8s.io/v1alpha1
+kind: XGatewayExternalService
+metadata:
+  name: ratelimit-gateway-policy
+spec:
+  type: RateLimit
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: ext-authz-gateway
+  endpoint:
+    host: limitador.default.svc.cluster.local
+    port: 8081
+  failureMode: Allow
+  timeout: 2s
+  data:
+    domain: gateway-global-ratelimit
+    scope: global

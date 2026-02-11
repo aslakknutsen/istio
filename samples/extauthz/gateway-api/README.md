@@ -1,7 +1,7 @@
-# GEP-5000 ExtAuth with XGatewayExternalService
+# GEP-5000 ExtAuth & RateLimit with XGatewayExternalService
 
-Manual test setup for the GEP-5000 ext_authz implementation using
-`XGatewayExternalService`.
+Manual test setup for the GEP-5000 implementation using
+`XGatewayExternalService` for both `ExtAuth` and `RateLimit` types.
 
 ## Prerequisites
 
@@ -29,10 +29,10 @@ This creates a Gateway with two HTTPRoutes, both pointing to httpbin:
 
 | Host | HTTPRoute | Purpose |
 |------|-----------|---------|
-| `httpbin.example.com` | `httpbin-route` | Target for ext-authz policy |
-| `noauth.example.com` | `httpbin-noauth` | No ext-authz, used as control |
+| `httpbin.example.com` | `httpbin-route` | Target for policies |
+| `noauth.example.com` | `httpbin-noauth` | No policies, used as control |
 
-## Enable ext_authz
+## ExtAuth
 
 Two policy variants are provided. Use one or the other.
 
@@ -48,7 +48,7 @@ kubectl apply -f ext-authz-policy-httproute.yaml
 kubectl apply -f ext-authz-policy-gateway.yaml
 ```
 
-To disable, delete whichever one you applied:
+To disable:
 
 ```bash
 kubectl delete -f ext-authz-policy-httproute.yaml
@@ -56,30 +56,80 @@ kubectl delete -f ext-authz-policy-httproute.yaml
 kubectl delete -f ext-authz-policy-gateway.yaml
 ```
 
-## Test
+### Test ExtAuth
 
 ```bash
 GATEWAY_IP=$(kubectl get gateway ext-authz-gateway -o jsonpath='{.status.addresses[0].value}')
 
-# httpbin.example.com -- protected by ext-authz (when policy is applied)
 # Denied (no allow header) -- expect 403
 curl -v -H "Host: httpbin.example.com" http://$GATEWAY_IP/get
 
 # Allowed -- expect 200
 curl -v -H "Host: httpbin.example.com" -H "x-ext-authz: allow" http://$GATEWAY_IP/get
 
-# noauth.example.com -- never protected by HTTPRoute-targeted policy
-# Should always return 200 regardless of headers
+# noauth.example.com -- not protected by HTTPRoute-targeted policy
 curl -v -H "Host: noauth.example.com" http://$GATEWAY_IP/get
 ```
 
-When using **Option A** (HTTPRoute target), only `httpbin.example.com` is
-protected. `noauth.example.com` should always return 200.
+## RateLimit
 
-When using **Option B** (Gateway target), both hosts are protected.
+### Deploy Limitador (RLS backend)
 
-The sample ext-authz server allows requests containing `x-ext-authz: allow`
-and denies everything else. See `../README.md` for details.
+```bash
+kubectl apply -f limitador.yaml
+```
+
+Wait for Limitador to be ready:
+
+```bash
+kubectl wait --for=condition=available deployment/limitador --timeout=60s
+```
+
+### Enable rate limiting
+
+**Option A: Target the HTTPRoute:**
+
+```bash
+kubectl apply -f ratelimit-policy-httproute.yaml
+```
+
+**Option B: Target the Gateway:**
+
+```bash
+kubectl apply -f ratelimit-policy-gateway.yaml
+```
+
+To disable:
+
+```bash
+kubectl delete -f ratelimit-policy-httproute.yaml
+# or
+kubectl delete -f ratelimit-policy-gateway.yaml
+```
+
+### Test RateLimit
+
+```bash
+GATEWAY_IP=$(kubectl get gateway ext-authz-gateway -o jsonpath='{.status.addresses[0].value}')
+
+# Send requests rapidly -- after the limit is hit, expect 429 Too Many Requests
+for i in $(seq 1 10); do
+  curl -s -o /dev/null -w "%{http_code}\n" -H "Host: httpbin.example.com" http://$GATEWAY_IP/get
+done
+```
+
+With the default Limitador config, the `httpbin-ratelimit` domain allows 5
+requests per minute. Requests beyond that should return 429.
+
+## Using both ExtAuth and RateLimit together
+
+You can apply both policies simultaneously. ext_authz runs first (lower in the
+HCM filter chain), and rate limiting runs after:
+
+```bash
+kubectl apply -f ext-authz-policy-httproute.yaml
+kubectl apply -f ratelimit-policy-httproute.yaml
+```
 
 ## Verify status
 

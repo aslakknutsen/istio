@@ -1,0 +1,26 @@
+# XGatewayExternalService of type RateLimit targeting the HTTPRoute.
+# Requires a Rate Limit Service (RLS) running in the cluster.
+# Compatible with Envoy's RLS gRPC API (e.g., Kuadrant Limitador).
+apiVersion: gateway.networking.x-k8s.io/v1alpha1
+kind: XGatewayExternalService
+metadata:
+  name: ratelimit-policy
+spec:
+  type: RateLimit
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: httpbin-route
+  endpoint:
+    # Point to your RLS service (e.g., Limitador)
+    host: limitador.default.svc.cluster.local
+    port: 8081
+  failureMode: Deny
+  timeout: 2s
+  priority: 10
+  data:
+    # "domain" maps to the RLS domain field
+    domain: httpbin-ratelimit
+    # Other keys become descriptor entries (GenericKey actions)
+    path: /api
+    plan: basic

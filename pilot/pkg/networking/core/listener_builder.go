@@ -20,7 +20,9 @@ import (
 	accesslog "github.com/envoyproxy/go-control-plane/envoy/config/accesslog/v3"
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
+	ratelimitcfg "github.com/envoyproxy/go-control-plane/envoy/config/ratelimit/v3"
 	extauthzhttp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_authz/v3"
+	ratelimitv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ratelimit/v3"
 	hcm "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	tcp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/tcp_proxy/v3"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -43,6 +45,8 @@ import (
 	"istio.io/istio/pilot/pkg/util/protoconv"
 	xdsfilters "istio.io/istio/pilot/pkg/xds/filters"
 	"istio.io/istio/pilot/pkg/xds/requestidextension"
+	kubegw "istio.io/istio/pkg/config/gateway/kube"
+	"istio.io/istio/pkg/config/host"
 	"istio.io/istio/pkg/config/protocol"
 	"istio.io/istio/pkg/log"
 	"istio.io/istio/pkg/proto"
@@ -412,6 +416,9 @@ func (lb *ListenerBuilder) buildHTTPConnectionManager(httpOpts *httpListenerOpts
 				for _, cfg := range lb.push.GatewayAPIController.ExtAuthzFilters(gwNN) {
 					filters = append(filters, buildGEP5000ExtAuthzFilter(cfg.FilterName, cfg.FailOpen))
 				}
+				for _, cfg := range lb.push.GatewayAPIController.RateLimitFilters(gwNN) {
+					filters = append(filters, buildGEP5000RateLimitFilter(cfg))
+				}
 			}
 		}
 		// TODO: how to deal with ext-authz? It will be in the ordering twice
@@ -504,6 +511,34 @@ func appendMxFilter(httpOpts *httpListenerOpts, filters []*hcm.HttpFilter) []*hc
 // A placeholder GrpcService is required because Envoy instantiates the filter factory even
 // when Disabled is true, and panics if the services oneof is unset.
 // The per-route CheckSettings.ServiceOverride replaces this at runtime.
+// buildGEP5000RateLimitFilter creates a disabled-by-default ratelimit HTTP filter for GEP 5000.
+// Unlike ext_authz, the ratelimit filter does NOT support per-route service overrides, so the
+// actual RLS cluster name must be configured at the HCM level. The per-route RateLimitPerRoute
+// configures only the domain and descriptor actions.
+func buildGEP5000RateLimitFilter(cfg kubegw.RateLimitHCMFilterConfig) *hcm.HttpFilter {
+	clusterName := model.BuildSubsetKey(model.TrafficDirectionOutbound, "", host.Name(cfg.Host), cfg.Port)
+	return &hcm.HttpFilter{
+		Name:     cfg.FilterName,
+		Disabled: true,
+		ConfigType: &hcm.HttpFilter_TypedConfig{
+			TypedConfig: protoconv.MessageToAny(&ratelimitv3.RateLimit{
+				Domain:          "placeholder",
+				FailureModeDeny: !cfg.FailOpen,
+				RateLimitService: &ratelimitcfg.RateLimitServiceConfig{
+					GrpcService: &core.GrpcService{
+						TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
+							EnvoyGrpc: &core.GrpcService_EnvoyGrpc{
+								ClusterName: clusterName,
+							},
+						},
+					},
+					TransportApiVersion: core.ApiVersion_V3,
+				},
+			}),
+		},
+	}
+}
+
 func buildGEP5000ExtAuthzFilter(filterName string, failOpen bool) *hcm.HttpFilter {
 	return &hcm.HttpFilter{
 		Name:     filterName,

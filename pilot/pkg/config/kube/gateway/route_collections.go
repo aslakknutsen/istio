@@ -86,6 +86,8 @@ func HTTPRouteCollection(
 		}{}
 		// Collect ext_authz configs per route rule name
 		extAuthzByRuleName := make(map[string][]kube.ExtAuthzRouteRuleConfig)
+		// Collect ratelimit configs per route rule name
+		rateLimitByRuleName := make(map[string][]kube.RateLimitRouteRuleConfig)
 		status := obj.Status.DeepCopy()
 		route := obj.Spec
 		parentStatus, parentRefs, meshResult, gwResult := computeRoute(ctx, obj, func(mesh bool, obj *gatewayv1.HTTPRoute) iter.Seq2[*istio.HTTPRoute, *ConfigError] {
@@ -113,11 +115,16 @@ func HTTPRouteCollection(
 								cfg  *inferencePoolConfig
 							}{name: istioRoute.Name, cfg: ipCfg})
 						}
-						// Resolve ext_authz for the first match only (same rule produces same ext_authz)
+						// Resolve ext_authz and ratelimit for the first match only (same rule produces same configs)
 						if istioRoute != nil {
 							if _, resolved := extAuthzByRuleName[istioRoute.Name]; !resolved {
 								if extAuthzCfgs := resolveExtAuthzForHTTPRoute(ctx, obj, ruleName); len(extAuthzCfgs) > 0 {
 									extAuthzByRuleName[istioRoute.Name] = extAuthzCfgs
+								}
+							}
+							if _, resolved := rateLimitByRuleName[istioRoute.Name]; !resolved {
+								if rlCfgs := resolveRateLimitForHTTPRoute(ctx, obj, ruleName); len(rlCfgs) > 0 {
+									rateLimitByRuleName[istioRoute.Name] = rlCfgs
 								}
 							}
 						}
@@ -211,6 +218,17 @@ func HTTPRouteCollection(
 				}
 				if len(currentRouteExtAuthzConfigs) > 0 {
 					extraData[constants.ConfigExtraPerRouteRuleExtAuthzConfigs] = currentRouteExtAuthzConfigs
+				}
+
+				// Populate ratelimit configs from XGatewayExternalService
+				currentRouteRateLimitConfigs := make(map[string][]kube.RateLimitRouteRuleConfig)
+				for _, httpRule := range routes {
+					if cfgs, found := rateLimitByRuleName[httpRule.Name]; found {
+						currentRouteRateLimitConfigs[httpRule.Name] = cfgs
+					}
+				}
+				if len(currentRouteRateLimitConfigs) > 0 {
+					extraData[constants.ConfigExtraPerRouteRuleRateLimitConfigs] = currentRouteRateLimitConfigs
 				}
 
 				cfg := config.Config{
@@ -859,6 +877,13 @@ func mergeHTTPRoutes(baseVirtualServices krt.Collection[RouteWithKey], opts ...k
 				}
 				base.Extra[constants.ConfigExtraPerRouteRuleExtAuthzConfigs] = newEAConfigs
 			}
+			if rlConfigs, ok := base.Extra[constants.ConfigExtraPerRouteRuleRateLimitConfigs].(map[string][]kube.RateLimitRouteRuleConfig); ok {
+				newRLConfigs := make(map[string][]kube.RateLimitRouteRuleConfig, len(rlConfigs))
+				for k, v := range rlConfigs {
+					newRLConfigs[k] = v
+				}
+				base.Extra[constants.ConfigExtraPerRouteRuleRateLimitConfigs] = newRLConfigs
+			}
 		}
 		for i, config := range configs[1:] {
 			thisVS := config.Spec.(*istio.VirtualService)
@@ -895,6 +920,18 @@ func mergeHTTPRoutes(baseVirtualServices krt.Collection[RouteWithKey], opts ...k
 						// For ext_authz configs, merge the maps
 						baseMap, baseOk := base.Extra[k].(map[string][]kube.ExtAuthzRouteRuleConfig)
 						configMap, configOk := v.(map[string][]kube.ExtAuthzRouteRuleConfig)
+						if baseOk && configOk {
+							for routeName, routeConfig := range configMap {
+								baseMap[routeName] = routeConfig
+							}
+						} else if configOk {
+							if _, exists := base.Extra[k]; !exists {
+								base.Extra[k] = v
+							}
+						}
+					case constants.ConfigExtraPerRouteRuleRateLimitConfigs:
+						baseMap, baseOk := base.Extra[k].(map[string][]kube.RateLimitRouteRuleConfig)
+						configMap, configOk := v.(map[string][]kube.RateLimitRouteRuleConfig)
 						if baseOk && configOk {
 							for routeName, routeConfig := range configMap {
 								baseMap[routeName] = routeConfig

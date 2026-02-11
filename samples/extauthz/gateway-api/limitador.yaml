@@ -1,0 +1,72 @@
+# A minimal Kuadrant Limitador deployment for testing rate limiting.
+# Limitador implements the Envoy RLS gRPC API.
+# For production use, configure persistent storage and proper limits.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: limitador-config
+data:
+  limits.yaml: |
+    # Rate limit: 5 requests per minute for httpbin-ratelimit domain
+    - namespace: httpbin-ratelimit
+      max_value: 5
+      seconds: 60
+      conditions: []
+      variables:
+        - path
+        - plan
+    # Rate limit: 100 requests per minute for gateway-global-ratelimit domain
+    - namespace: gateway-global-ratelimit
+      max_value: 100
+      seconds: 60
+      conditions: []
+      variables:
+        - scope
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: limitador
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: limitador
+  template:
+    metadata:
+      labels:
+        app: limitador
+    spec:
+      containers:
+      - name: limitador
+        image: quay.io/kuadrant/limitador:latest
+        args:
+          - "limitador-server"
+          - "/etc/limitador/limits.yaml"
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8081
+          name: grpc
+        volumeMounts:
+        - name: config
+          mountPath: /etc/limitador
+      volumes:
+      - name: config
+        configMap:
+          name: limitador-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: limitador
+spec:
+  selector:
+    app: limitador
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: grpc
+    port: 8081
+    targetPort: 8081

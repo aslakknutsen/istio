@@ -100,6 +100,75 @@ func resolveExtAuthzForHTTPRoute(
 	return configs
 }
 
+// resolveRateLimitForHTTPRoute finds all XGatewayExternalService resources of type RateLimit
+// that target the given HTTPRoute, optionally filtered by sectionName (rule name).
+// Results are sorted by priority (lower values first).
+func resolveRateLimitForHTTPRoute(
+	ctx RouteContext,
+	httpRoute *gatewayv1.HTTPRoute,
+	ruleName string,
+) []kubegw.RateLimitRouteRuleConfig {
+	allExtSvcs := krt.Fetch(ctx.Krt, ctx.GatewayExternalServices)
+	var configs []kubegw.RateLimitRouteRuleConfig
+
+	for _, extSvc := range allExtSvcs {
+		if extSvc.Spec.Type != gatewayx.ExternalServiceTypeRateLimit {
+			continue
+		}
+
+		ref := extSvc.Spec.TargetRef
+		if string(ref.Group) != gatewayv1.GroupName {
+			continue
+		}
+		if string(ref.Kind) != "HTTPRoute" {
+			continue
+		}
+		if extSvc.Namespace != httpRoute.Namespace {
+			continue
+		}
+		if string(ref.Name) != httpRoute.Name {
+			continue
+		}
+		if ref.SectionName != nil && string(*ref.SectionName) != ruleName {
+			continue
+		}
+
+		var timeout time.Duration
+		if extSvc.Spec.Timeout != nil {
+			d, err := time.ParseDuration(string(*extSvc.Spec.Timeout))
+			if err == nil {
+				timeout = d
+			}
+		}
+
+		var priority int32
+		if extSvc.Spec.Priority != nil {
+			priority = *extSvc.Spec.Priority
+		}
+
+		domain, descriptors := kubegw.ParseRateLimitData(extSvc.Spec.Data)
+
+		configs = append(configs, kubegw.RateLimitRouteRuleConfig{
+			FilterName:  kubegw.RateLimitFilterName(extSvc.Namespace, extSvc.Name),
+			Host:        string(extSvc.Spec.Endpoint.Host),
+			Port:        int(extSvc.Spec.Endpoint.Port),
+			Timeout:     timeout,
+			Priority:    priority,
+			Domain:      domain,
+			Descriptors: descriptors,
+		})
+	}
+
+	slices.SortFunc(configs, func(a, b kubegw.RateLimitRouteRuleConfig) int {
+		if c := cmp.Compare(a.Priority, b.Priority); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.FilterName, b.FilterName)
+	})
+
+	return configs
+}
+
 // GatewayExternalServiceStatusCollection builds a status collection for XGatewayExternalService resources.
 // It validates that the targetRef points to an existing Gateway or HTTPRoute and sets the Accepted condition.
 func GatewayExternalServiceStatusCollection(

@@ -737,6 +737,12 @@ func TestConvertResources(t *testing.T) {
 				"default/ext-authz-svc",
 			),
 		},
+		{
+			name: "ratelimit",
+			validationIgnorer: crdvalidation.NewValidationIgnorer(
+				"default/ratelimit-svc",
+			),
+		},
 		{name: "listenerset"},
 		{name: "listenerset-cross-namespace"},
 		{name: "listenerset-same-name-different-ns"},

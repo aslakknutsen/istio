@@ -419,12 +419,14 @@ func (configgen *ConfigGeneratorImpl) buildGatewayHTTPRouteConfig(node *model.Pr
 	gatewayVirtualServices := make(map[string][]*config.Config)
 	vHostDedupMap := make(map[host.Name]*route.VirtualHost)
 
-	// Resolve Gateway-targeted ext_authz configs (applied at VirtualHost level).
+	// Resolve Gateway-targeted ext_authz and ratelimit configs (applied at VirtualHost level).
 	var gwExtAuthzConfigs []kubegw.ExtAuthzRouteRuleConfig
+	var gwRateLimitConfigs []kubegw.RateLimitRouteRuleConfig
 	if kubeGwName, ok := node.Labels[label.IoK8sNetworkingGatewayGatewayName.Name]; ok {
 		gwNN := types.NamespacedName{Name: kubeGwName, Namespace: node.GetNamespace()}
 		if push.GatewayAPIController != nil {
 			gwExtAuthzConfigs = push.GatewayAPIController.GatewayTargetedExtAuthzConfigs(gwNN)
+			gwRateLimitConfigs = push.GatewayAPIController.GatewayTargetedRateLimitConfigs(gwNN)
 		}
 	}
 
@@ -464,6 +466,7 @@ func (configgen *ConfigGeneratorImpl) buildGatewayHTTPRouteConfig(node *model.Pr
 
 			infPoolConfigs := istio_route.CheckAndGetInferencePoolConfigs(*virtualService)
 			extAuthzConfigs := istio_route.CheckAndGetExtAuthzConfigs(*virtualService)
+			rateLimitConfigs := istio_route.CheckAndGetRateLimitConfigs(*virtualService)
 
 			vskey := virtualService.Name + "/" + virtualService.Namespace
 
@@ -483,6 +486,7 @@ func (configgen *ConfigGeneratorImpl) buildGatewayHTTPRouteConfig(node *model.Pr
 					},
 					InferencePoolExtensionRefs: infPoolConfigs,
 					ExtAuthzConfigs:            extAuthzConfigs,
+					RateLimitConfigs:           rateLimitConfigs,
 				}
 				routes, err = istio_route.BuildHTTPRoutesForVirtualService(node, *virtualService, port, sets.New(gatewayName), opts)
 				if err != nil {
@@ -515,6 +519,10 @@ func (configgen *ConfigGeneratorImpl) buildGatewayHTTPRouteConfig(node *model.Pr
 					// Apply Gateway-targeted ext_authz at VirtualHost level so all routes inherit it.
 					for _, cfg := range gwExtAuthzConfigs {
 						perRouteFilters[cfg.FilterName] = istio_route.BuildExtAuthzPerRouteAny(cfg)
+					}
+					// Apply Gateway-targeted ratelimit at VirtualHost level.
+					for _, cfg := range gwRateLimitConfigs {
+						perRouteFilters[cfg.FilterName] = istio_route.BuildRateLimitPerRouteAny(cfg)
 					}
 					newVHost := &route.VirtualHost{
 						Name:    util.DomainName(string(hostname), port),

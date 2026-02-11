@@ -44,6 +44,14 @@ func (f FakeController) GatewayTargetedExtAuthzConfigs(_ types.NamespacedName) [
 	return nil
 }
 
+func (f FakeController) RateLimitFilters(_ types.NamespacedName) []kubegw.RateLimitHCMFilterConfig {
+	return nil
+}
+
+func (f FakeController) GatewayTargetedRateLimitConfigs(_ types.NamespacedName) []kubegw.RateLimitRouteRuleConfig {
+	return nil
+}
+
 func (f FakeController) Reconcile(_ *PushContext) {}
 
 // NOTE: To simplify test setup, if CredentialName contains 'allowed-ns', always return true.

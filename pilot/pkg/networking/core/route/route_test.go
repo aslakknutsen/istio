@@ -23,6 +23,7 @@ import (
 	envoyroute "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	extauthzhttp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_authz/v3"
 	extproc "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
+	ratelimitv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ratelimit/v3"
 	matcher "github.com/envoyproxy/go-control-plane/envoy/type/matcher/v3"
 	. "github.com/onsi/gomega"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -1570,6 +1571,131 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(routes[0].GetTypedPerFilterConfig()).To(HaveKey(filterA))
 		g.Expect(routes[0].GetTypedPerFilterConfig()).To(HaveKey(filterB))
+	})
+
+	t.Run("for virtual service with ratelimit config", func(t *testing.T) {
+		g := NewWithT(t)
+		cg := core.NewConfigGenTest(t, core.TestOptions{})
+
+		filterName := kube.RateLimitFilterName("default", "my-ratelimit")
+		routeOpts := buildRouteOpts(serviceRegistry, nil)
+		routeOpts.RateLimitConfigs = map[string][]kube.RateLimitRouteRuleConfig{
+			"routeA": {
+				{
+					FilterName: filterName,
+					Host:       "rls.default.svc.cluster.local",
+					Port:       8081,
+					Timeout:    5000000000, // 5s
+					Domain:     "my-domain",
+					Descriptors: []kube.RateLimitDescriptor{
+						{Key: "path", Value: "/api"},
+						{Key: "plan", Value: "premium"},
+					},
+				},
+			},
+		}
+		routes, err := route.BuildHTTPRoutesForVirtualService(node(cg), virtualServicePlain, 8080, gatewayNames, routeOpts)
+		xdstest.ValidateRoutes(t, routes)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(routes[0].GetTypedPerFilterConfig()).To(HaveKey(filterName))
+		rlPerRoute := new(ratelimitv3.RateLimitPerRoute)
+		if err := routes[0].GetTypedPerFilterConfig()[filterName].UnmarshalTo(rlPerRoute); err != nil {
+			t.Fatalf("couldn't unmarshal RateLimitPerRoute: %v", err)
+		}
+		g.Expect(rlPerRoute.GetDomain()).To(Equal("my-domain"))
+		g.Expect(rlPerRoute.GetRateLimits()).To(HaveLen(1))
+		actions := rlPerRoute.GetRateLimits()[0].GetActions()
+		g.Expect(actions).To(HaveLen(2))
+		// Static GenericKey descriptors
+		foundPath := false
+		foundPlan := false
+		for _, a := range actions {
+			gk := a.GetGenericKey()
+			if gk != nil && gk.GetDescriptorKey() == "path" && gk.GetDescriptorValue() == "/api" {
+				foundPath = true
+			}
+			if gk != nil && gk.GetDescriptorKey() == "plan" && gk.GetDescriptorValue() == "premium" {
+				foundPlan = true
+			}
+		}
+		g.Expect(foundPath).To(BeTrue())
+		g.Expect(foundPlan).To(BeTrue())
+	})
+
+	t.Run("for virtual service with multiple ratelimit backends on same route", func(t *testing.T) {
+		g := NewWithT(t)
+		cg := core.NewConfigGenTest(t, core.TestOptions{})
+
+		filterA := kube.RateLimitFilterName("default", "rl-a")
+		filterB := kube.RateLimitFilterName("default", "rl-b")
+		routeOpts := buildRouteOpts(serviceRegistry, nil)
+		routeOpts.RateLimitConfigs = map[string][]kube.RateLimitRouteRuleConfig{
+			"routeA": {
+				{
+					FilterName:  filterA,
+					Host:        "rls-a.default.svc.cluster.local",
+					Port:        8081,
+					Domain:      "domain-a",
+					Descriptors: []kube.RateLimitDescriptor{{Key: "key-a", Value: "val-a"}},
+				},
+				{
+					FilterName:  filterB,
+					Host:        "rls-b.default.svc.cluster.local",
+					Port:        8082,
+					Domain:      "domain-b",
+					Descriptors: []kube.RateLimitDescriptor{{Key: "key-b", Value: "val-b"}},
+				},
+			},
+		}
+		routes, err := route.BuildHTTPRoutesForVirtualService(node(cg), virtualServicePlain, 8080, gatewayNames, routeOpts)
+		xdstest.ValidateRoutes(t, routes)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(routes[0].GetTypedPerFilterConfig()).To(HaveKey(filterA))
+		g.Expect(routes[0].GetTypedPerFilterConfig()).To(HaveKey(filterB))
+	})
+
+	t.Run("for virtual service with ratelimit metadata descriptor", func(t *testing.T) {
+		g := NewWithT(t)
+		cg := core.NewConfigGenTest(t, core.TestOptions{})
+
+		filterName := kube.RateLimitFilterName("default", "rl-meta")
+		routeOpts := buildRouteOpts(serviceRegistry, nil)
+		routeOpts.RateLimitConfigs = map[string][]kube.RateLimitRouteRuleConfig{
+			"routeA": {
+				{
+					FilterName: filterName,
+					Host:       "rls.default.svc.cluster.local",
+					Port:       8081,
+					Domain:     "my-domain",
+					Descriptors: []kube.RateLimitDescriptor{
+						{
+							Key:                "user_id",
+							MetadataFilterName: "envoy.filters.http.jwt_authn",
+							MetadataPath:       []string{"claims", "sub"},
+							DefaultValue:       "unknown",
+						},
+					},
+				},
+			},
+		}
+		routes, err := route.BuildHTTPRoutesForVirtualService(node(cg), virtualServicePlain, 8080, gatewayNames, routeOpts)
+		xdstest.ValidateRoutes(t, routes)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(routes[0].GetTypedPerFilterConfig()).To(HaveKey(filterName))
+		rlPerRoute := new(ratelimitv3.RateLimitPerRoute)
+		if err := routes[0].GetTypedPerFilterConfig()[filterName].UnmarshalTo(rlPerRoute); err != nil {
+			t.Fatalf("couldn't unmarshal RateLimitPerRoute: %v", err)
+		}
+		actions := rlPerRoute.GetRateLimits()[0].GetActions()
+		g.Expect(actions).To(HaveLen(1))
+		md := actions[0].GetMetadata()
+		g.Expect(md).NotTo(BeNil())
+		g.Expect(md.GetDescriptorKey()).To(Equal("user_id"))
+		g.Expect(md.GetDefaultValue()).To(Equal("unknown"))
+		g.Expect(md.GetMetadataKey().GetKey()).To(Equal("envoy.filters.http.jwt_authn"))
+		g.Expect(md.GetMetadataKey().GetPath()).To(HaveLen(2))
+		g.Expect(md.GetMetadataKey().GetPath()[0].GetKey()).To(Equal("claims"))
+		g.Expect(md.GetMetadataKey().GetPath()[1].GetKey()).To(Equal("sub"))
 	})
 
 	t.Run("for virtualservices with with wildcard hosts outside of the serviceregistry (on port 80)", func(t *testing.T) {

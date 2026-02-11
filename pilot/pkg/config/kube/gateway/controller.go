@@ -735,6 +735,96 @@ func (c *Controller) GatewayTargetedExtAuthzConfigs(gw types.NamespacedName) []k
 	return configs
 }
 
+func (c *Controller) RateLimitFilters(gw types.NamespacedName) []kubegw.RateLimitHCMFilterConfig {
+	allExtSvcs := c.inputs.GatewayExternalServices.List()
+	var configs []kubegw.RateLimitHCMFilterConfig
+	for _, extSvc := range allExtSvcs {
+		if extSvc.Spec.Type != gatewayx.ExternalServiceTypeRateLimit {
+			continue
+		}
+		ref := extSvc.Spec.TargetRef
+		if string(ref.Group) != gatewayv1.GroupName {
+			continue
+		}
+		targeted := false
+		if string(ref.Kind) == "Gateway" {
+			targeted = extSvc.Namespace == gw.Namespace && string(ref.Name) == gw.Name
+		} else if string(ref.Kind) == "HTTPRoute" {
+			targeted = c.httpRouteAttachesToGateway(extSvc.Namespace, string(ref.Name), gw)
+		}
+		if !targeted {
+			continue
+		}
+		var failOpen bool
+		if extSvc.Spec.FailureMode != nil && *extSvc.Spec.FailureMode == gatewayx.FailureModeAllow {
+			failOpen = true
+		}
+		var priority int32
+		if extSvc.Spec.Priority != nil {
+			priority = *extSvc.Spec.Priority
+		}
+		configs = append(configs, kubegw.RateLimitHCMFilterConfig{
+			FilterName: kubegw.RateLimitFilterName(extSvc.Namespace, extSvc.Name),
+			FailOpen:   failOpen,
+			Priority:   priority,
+			Host:       string(extSvc.Spec.Endpoint.Host),
+			Port:       int(extSvc.Spec.Endpoint.Port),
+		})
+	}
+	slices.SortFunc(configs, func(a, b kubegw.RateLimitHCMFilterConfig) int {
+		if c := cmp.Compare(a.Priority, b.Priority); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.FilterName, b.FilterName)
+	})
+	return configs
+}
+
+func (c *Controller) GatewayTargetedRateLimitConfigs(gw types.NamespacedName) []kubegw.RateLimitRouteRuleConfig {
+	allExtSvcs := c.inputs.GatewayExternalServices.List()
+	var configs []kubegw.RateLimitRouteRuleConfig
+	for _, extSvc := range allExtSvcs {
+		if extSvc.Spec.Type != gatewayx.ExternalServiceTypeRateLimit {
+			continue
+		}
+		ref := extSvc.Spec.TargetRef
+		if string(ref.Group) != gatewayv1.GroupName || string(ref.Kind) != "Gateway" {
+			continue
+		}
+		if extSvc.Namespace != gw.Namespace || string(ref.Name) != gw.Name {
+			continue
+		}
+		var timeout time.Duration
+		if extSvc.Spec.Timeout != nil {
+			d, err := time.ParseDuration(string(*extSvc.Spec.Timeout))
+			if err == nil {
+				timeout = d
+			}
+		}
+		var priority int32
+		if extSvc.Spec.Priority != nil {
+			priority = *extSvc.Spec.Priority
+		}
+		domain, descriptors := kubegw.ParseRateLimitData(extSvc.Spec.Data)
+		configs = append(configs, kubegw.RateLimitRouteRuleConfig{
+			FilterName:  kubegw.RateLimitFilterName(extSvc.Namespace, extSvc.Name),
+			Host:        string(extSvc.Spec.Endpoint.Host),
+			Port:        int(extSvc.Spec.Endpoint.Port),
+			Timeout:     timeout,
+			Priority:    priority,
+			Domain:      domain,
+			Descriptors: descriptors,
+		})
+	}
+	slices.SortFunc(configs, func(a, b kubegw.RateLimitRouteRuleConfig) int {
+		if c := cmp.Compare(a.Priority, b.Priority); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.FilterName, b.FilterName)
+	})
+	return configs
+}
+
 // httpRouteAttachesToGateway checks whether the named HTTPRoute has a parentRef pointing to the given gateway.
 func (c *Controller) httpRouteAttachesToGateway(routeNamespace, routeName string, gw types.NamespacedName) bool {
 	for _, hr := range c.inputs.HTTPRoutes.List() {

@@ -28,8 +28,10 @@ import (
 	extauthzhttp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_authz/v3"
 	extproc "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	xdshttpfault "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/fault/v3"
+	ratelimitv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ratelimit/v3"
 	statefulsession "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/stateful_session/v3"
 	matcher "github.com/envoyproxy/go-control-plane/envoy/type/matcher/v3"
+	metadatav3 "github.com/envoyproxy/go-control-plane/envoy/type/metadata/v3"
 	xdstype "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -389,6 +391,7 @@ type RouteOptions struct {
 
 	InferencePoolExtensionRefs map[string]kube.InferencePoolRouteRuleConfig
 	ExtAuthzConfigs            map[string][]kube.ExtAuthzRouteRuleConfig
+	RateLimitConfigs           map[string][]kube.RateLimitRouteRuleConfig
 }
 
 // BuildHTTPRoutesForVirtualService creates data plane HTTP routes from the virtual service spec.
@@ -554,6 +557,15 @@ func TranslateRoute(
 				out.TypedPerFilterConfig = make(map[string]*anypb.Any)
 			}
 			out.TypedPerFilterConfig[cfg.FilterName] = BuildExtAuthzPerRouteAny(cfg)
+		}
+	}
+	// Set up ratelimit per-route config from XGatewayExternalService
+	if rlCfgs, ok := opts.RateLimitConfigs[in.Name]; ok {
+		for _, cfg := range rlCfgs {
+			if out.TypedPerFilterConfig == nil {
+				out.TypedPerFilterConfig = make(map[string]*anypb.Any)
+			}
+			out.TypedPerFilterConfig[cfg.FilterName] = BuildRateLimitPerRouteAny(cfg)
 		}
 	}
 	if in.Redirect != nil {
@@ -1724,6 +1736,66 @@ func BuildExtAuthzPerRouteAny(cfg kube.ExtAuthzRouteRuleConfig) *anypb.Any {
 	return protoconv.MessageToAny(&extauthzhttp.ExtAuthzPerRoute{
 		Override: &extauthzhttp.ExtAuthzPerRoute_CheckSettings{
 			CheckSettings: checkSettings,
+		},
+	})
+}
+
+// CheckAndGetRateLimitConfigs extracts ratelimit configurations from a VirtualService's Extra field.
+func CheckAndGetRateLimitConfigs(virtualService config.Config) map[string][]kube.RateLimitRouteRuleConfig {
+	if virtualService.Extra != nil {
+		if rlConfigs, ok := virtualService.Extra[constants.ConfigExtraPerRouteRuleRateLimitConfigs].(map[string][]kube.RateLimitRouteRuleConfig); ok {
+			return rlConfigs
+		}
+	}
+	return nil
+}
+
+// BuildRateLimitPerRouteAny builds the Envoy RateLimitPerRoute Any proto for a given
+// RateLimitRouteRuleConfig. This configures the per-route rate limit descriptor actions and domain.
+// The RLS service connection is configured at the HCM level (not per-route).
+func BuildRateLimitPerRouteAny(cfg kube.RateLimitRouteRuleConfig) *anypb.Any {
+	var actions []*route.RateLimit_Action
+	for _, desc := range cfg.Descriptors {
+		if desc.MetadataFilterName != "" {
+			// Dynamic metadata descriptor
+			var pathSegments []*metadatav3.MetadataKey_PathSegment
+			for _, p := range desc.MetadataPath {
+				pathSegments = append(pathSegments, &metadatav3.MetadataKey_PathSegment{
+					Segment: &metadatav3.MetadataKey_PathSegment_Key{Key: p},
+				})
+			}
+			actions = append(actions, &route.RateLimit_Action{
+				ActionSpecifier: &route.RateLimit_Action_Metadata{
+					Metadata: &route.RateLimit_Action_MetaData{
+						DescriptorKey: desc.Key,
+						MetadataKey: &metadatav3.MetadataKey{
+							Key:  desc.MetadataFilterName,
+							Path: pathSegments,
+						},
+						DefaultValue: desc.DefaultValue,
+						Source:       route.RateLimit_Action_MetaData_DYNAMIC,
+					},
+				},
+			})
+		} else {
+			// Static generic key descriptor
+			actions = append(actions, &route.RateLimit_Action{
+				ActionSpecifier: &route.RateLimit_Action_GenericKey_{
+					GenericKey: &route.RateLimit_Action_GenericKey{
+						DescriptorKey:   desc.Key,
+						DescriptorValue: desc.Value,
+					},
+				},
+			})
+		}
+	}
+
+	return protoconv.MessageToAny(&ratelimitv3.RateLimitPerRoute{
+		Domain: cfg.Domain,
+		RateLimits: []*route.RateLimit{
+			{
+				Actions: actions,
+			},
 		},
 	})
 }

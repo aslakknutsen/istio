@@ -225,4 +225,6 @@ const (
 	ConfigExtraPerRouteRuleInferencePoolConfigs = "perRouteRuleInferencePoolConfigs"
 
 	ConfigExtraPerRouteRuleExtAuthzConfigs = "perRouteRuleExtAuthzConfigs"
+
+	ConfigExtraPerRouteRuleRateLimitConfigs = "perRouteRuleRateLimitConfigs"
 )
