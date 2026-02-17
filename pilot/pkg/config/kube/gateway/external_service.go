@@ -198,6 +198,12 @@ func GatewayExternalServiceStatusCollection(
 				Reason:  string(gatewayv1.PolicyReasonInvalid),
 				Message: fmt.Sprintf("unsupported targetRef group: %q", ref.Group),
 			}
+		} else if i.Spec.Type == gatewayx.ExternalServiceTypeTracing && string(ref.Kind) != "Gateway" {
+			// Tracing is HCM-level configuration and only supports Gateway targetRef.
+			conds[string(gatewayv1.PolicyConditionAccepted)].error = &ConfigError{
+				Reason:  string(gatewayv1.PolicyReasonInvalid),
+				Message: "Tracing type only supports Gateway targetRef (tracing is gateway-wide, not per-route)",
+			}
 		} else {
 			// Validate the target exists
 			switch string(ref.Kind) {

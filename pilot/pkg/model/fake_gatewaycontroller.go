@@ -52,6 +52,10 @@ func (f FakeController) GatewayTargetedRateLimitConfigs(_ types.NamespacedName) 
 	return nil
 }
 
+func (f FakeController) TracingConfig(_ types.NamespacedName) *kubegw.TracingConfig {
+	return nil
+}
+
 func (f FakeController) Reconcile(_ *PushContext) {}
 
 // NOTE: To simplify test setup, if CredentialName contains 'allowed-ns', always return true.

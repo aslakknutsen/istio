@@ -1096,6 +1096,10 @@ type GatewayController interface {
 	// GatewayTargetedRateLimitConfigs returns per-route ratelimit configs for
 	// XGatewayExternalService resources of type RateLimit that directly target this gateway.
 	GatewayTargetedRateLimitConfigs(types.NamespacedName) []kubegw.RateLimitRouteRuleConfig
+	// TracingConfig returns the tracing configuration from an XGatewayExternalService
+	// of type Tracing targeting this gateway. Returns nil if none. Only Gateway targetRef
+	// is supported (tracing is HCM-level, not per-route).
+	TracingConfig(types.NamespacedName) *kubegw.TracingConfig
 }
 
 // OutboundListenerClass is a helper to turn a NodeType for outbound to a ListenerClass.

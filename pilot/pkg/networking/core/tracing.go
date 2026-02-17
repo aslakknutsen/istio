@@ -40,6 +40,8 @@ import (
 	"istio.io/istio/pilot/pkg/util/protoconv"
 	xdsfilters "istio.io/istio/pilot/pkg/xds/filters"
 	"istio.io/istio/pilot/pkg/xds/requestidextension"
+	kubegw "istio.io/istio/pkg/config/gateway/kube"
+	"istio.io/istio/pkg/config/host"
 	"istio.io/istio/pkg/env"
 	"istio.io/istio/pkg/log"
 	"istio.io/istio/pkg/wellknown"
@@ -871,4 +873,69 @@ func getHeaderValue(header *meshconfig.MeshConfig_ExtensionProvider_HttpHeader) 
 		return env.Register[string](hv.EnvName, "", "").Get()
 	}
 	return ""
+}
+
+// applyGEP5000Tracing overrides the HCM tracing provider with an OTLP collector
+// configured via an XGatewayExternalService of type Tracing. It preserves existing
+// sampling and custom tags from the Telemetry API unless explicitly overridden.
+func applyGEP5000Tracing(h *hcm.HttpConnectionManager, cfg *kubegw.TracingConfig) {
+	clusterName := model.BuildSubsetKey(model.TrafficDirectionOutbound, "", host.Name(cfg.Host), cfg.Port)
+
+	oc := &tracingcfg.OpenTelemetryConfig{}
+	if cfg.ServiceName != "" {
+		oc.ServiceName = cfg.ServiceName
+	}
+
+	if cfg.Protocol == "GRPC" {
+		oc.GrpcService = &core.GrpcService{
+			TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
+				EnvoyGrpc: &core.GrpcService_EnvoyGrpc{
+					ClusterName: clusterName,
+					Authority:   cfg.Host,
+				},
+			},
+		}
+		if cfg.Timeout > 0 {
+			oc.GrpcService.Timeout = durationpb.New(cfg.Timeout)
+		}
+	} else {
+		oc.HttpService = &core.HttpService{
+			HttpUri: &core.HttpUri{
+				Uri: fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port),
+				HttpUpstreamType: &core.HttpUri_Cluster{
+					Cluster: clusterName,
+				},
+			},
+		}
+		if cfg.Timeout > 0 {
+			oc.HttpService.HttpUri.Timeout = durationpb.New(cfg.Timeout)
+		}
+	}
+
+	// Ensure HCM Tracing struct exists
+	if h.Tracing == nil {
+		h.Tracing = &hcm.HttpConnectionManager_Tracing{}
+	}
+
+	// Override the provider with the OTLP collector
+	h.Tracing.Provider = &tracingcfg.Tracing_Http{
+		Name:       envoyOpenTelemetry,
+		ConfigType: &tracingcfg.Tracing_Http_TypedConfig{TypedConfig: protoconv.MessageToAny(oc)},
+	}
+
+	// Override sampling if specified in Data
+	if cfg.SamplingRate != nil {
+		h.Tracing.OverallSampling = &xdstype.Percent{Value: 100.0}
+		h.Tracing.RandomSampling = &xdstype.Percent{Value: *cfg.SamplingRate}
+	}
+
+	// Append custom tags from Data as Literal tags
+	for k, v := range cfg.CustomTags {
+		h.Tracing.CustomTags = append(h.Tracing.CustomTags, &tracing.CustomTag{
+			Tag: k,
+			Type: &tracing.CustomTag_Literal_{
+				Literal: &tracing.CustomTag_Literal{Value: v},
+			},
+		})
+	}
 }

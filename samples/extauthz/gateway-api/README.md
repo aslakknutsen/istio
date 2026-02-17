@@ -1,7 +1,7 @@
-# GEP-5000 ExtAuth & RateLimit with XGatewayExternalService
+# GEP-5000 ExtAuth, RateLimit & Tracing with XGatewayExternalService
 
 Manual test setup for the GEP-5000 implementation using
-`XGatewayExternalService` for both `ExtAuth` and `RateLimit` types.
+`XGatewayExternalService` for `ExtAuth`, `RateLimit`, and `Tracing` types.
 
 ## Prerequisites
 
@@ -121,14 +121,63 @@ done
 With the default Limitador config, the `httpbin-ratelimit` domain allows 5
 requests per minute. Requests beyond that should return 429.
 
-## Using both ExtAuth and RateLimit together
+## Tracing
 
-You can apply both policies simultaneously. ext_authz runs first (lower in the
-HCM filter chain), and rate limiting runs after:
+Tracing is gateway-wide -- only Gateway targetRef is supported (HTTPRoute
+targeting is rejected). It configures the HCM's OTLP tracing provider.
+
+### Deploy OpenTelemetry Collector
+
+```bash
+kubectl apply -f otel-collector.yaml
+```
+
+Wait for the collector to be ready:
+
+```bash
+kubectl wait --for=condition=available deployment/otel-collector --timeout=60s
+```
+
+### Enable tracing
+
+```bash
+kubectl apply -f tracing-policy.yaml
+```
+
+To disable:
+
+```bash
+kubectl delete -f tracing-policy.yaml
+```
+
+### Test Tracing
+
+```bash
+GATEWAY_IP=$(kubectl get gateway ext-authz-gateway -o jsonpath='{.status.addresses[0].value}')
+
+# Send a few requests
+curl -v -H "Host: httpbin.example.com" http://$GATEWAY_IP/get
+```
+
+Check the collector logs for traces:
+
+```bash
+kubectl logs deployment/otel-collector
+```
+
+The `data` field controls tracing behavior:
+- `sampling_rate`: percentage of requests to trace (e.g., "1.0" for 1%)
+- `service_name`: OTLP service name for spans
+- Other keys become custom span tags
+
+## Using all three together
+
+You can apply ExtAuth, RateLimit, and Tracing simultaneously:
 
 ```bash
 kubectl apply -f ext-authz-policy-httproute.yaml
 kubectl apply -f ratelimit-policy-httproute.yaml
+kubectl apply -f tracing-policy.yaml
 ```
 
 ## Verify status
@@ -138,4 +187,5 @@ kubectl get xgatewayexternalservices -o yaml
 ```
 
 The `status.ancestors` section should show `Accepted: True` when the
-targetRef resolves to an existing Gateway or HTTPRoute.
+targetRef resolves to an existing Gateway or HTTPRoute. For Tracing type
+with HTTPRoute targetRef, it will show `Accepted: False` with reason `Invalid`.

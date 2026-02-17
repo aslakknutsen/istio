@@ -1,0 +1,26 @@
+# XGatewayExternalService of type Tracing targeting the Gateway.
+# Configures OTLP tracing for all routes on the gateway.
+# Only Gateway targetRef is supported (tracing is gateway-wide).
+apiVersion: gateway.networking.x-k8s.io/v1alpha1
+kind: XGatewayExternalService
+metadata:
+  name: otel-tracing
+spec:
+  type: Tracing
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: ext-authz-gateway
+  endpoint:
+    host: otel-collector.default.svc.cluster.local
+    port: 4317
+    protocol: GRPC
+  failureMode: Allow
+  timeout: 5s
+  data:
+    # sampling_rate: percentage of requests to trace (0-100)
+    sampling_rate: "1.0"
+    # service_name: OTLP service name for spans
+    service_name: my-gateway
+    # Other keys become custom span tags
+    environment: staging

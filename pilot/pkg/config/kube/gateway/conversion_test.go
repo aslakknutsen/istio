@@ -743,6 +743,18 @@ func TestConvertResources(t *testing.T) {
 				"default/ratelimit-svc",
 			),
 		},
+		{
+			name: "tracing",
+			validationIgnorer: crdvalidation.NewValidationIgnorer(
+				"istio-system/otel-tracing",
+			),
+		},
+		{
+			name: "tracing-invalid",
+			validationIgnorer: crdvalidation.NewValidationIgnorer(
+				"default/otel-tracing-bad",
+			),
+		},
 		{name: "listenerset"},
 		{name: "listenerset-cross-namespace"},
 		{name: "listenerset-same-name-different-ns"},

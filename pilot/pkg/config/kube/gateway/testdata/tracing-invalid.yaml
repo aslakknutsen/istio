@@ -1,0 +1,63 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: istio
+spec:
+  controllerName: istio.io/gateway-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway
+  namespace: istio-system
+spec:
+  addresses:
+  - value: istio-ingressgateway
+    type: Hostname
+  gatewayClassName: istio
+  listeners:
+  - name: default
+    hostname: "*.domain.example"
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: http
+  namespace: default
+spec:
+  parentRefs:
+  - name: gateway
+    namespace: istio-system
+  hostnames: ["first.domain.example"]
+  rules:
+  - name: my-rule
+    matches:
+    - path:
+        type: PathPrefix
+        value: /get
+    backendRefs:
+    - name: httpbin
+      port: 80
+---
+# This should be rejected -- Tracing with HTTPRoute targetRef is invalid.
+apiVersion: gateway.networking.x-k8s.io/v1alpha1
+kind: XGatewayExternalService
+metadata:
+  name: otel-tracing-bad
+  namespace: default
+spec:
+  type: Tracing
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: http
+  endpoint:
+    host: otel-collector.observability.svc.cluster.local
+    port: 4317
+    protocol: GRPC
+  failureMode: Allow

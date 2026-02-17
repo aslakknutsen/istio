@@ -825,6 +825,50 @@ func (c *Controller) GatewayTargetedRateLimitConfigs(gw types.NamespacedName) []
 	return configs
 }
 
+func (c *Controller) TracingConfig(gw types.NamespacedName) *kubegw.TracingConfig {
+	allExtSvcs := c.inputs.GatewayExternalServices.List()
+	var best *kubegw.TracingConfig
+	var bestPriority int32 = 1001 // higher than max allowed (1000)
+	for _, extSvc := range allExtSvcs {
+		if extSvc.Spec.Type != gatewayx.ExternalServiceTypeTracing {
+			continue
+		}
+		ref := extSvc.Spec.TargetRef
+		if string(ref.Group) != gatewayv1.GroupName || string(ref.Kind) != "Gateway" {
+			continue
+		}
+		if extSvc.Namespace != gw.Namespace || string(ref.Name) != gw.Name {
+			continue
+		}
+		var priority int32
+		if extSvc.Spec.Priority != nil {
+			priority = *extSvc.Spec.Priority
+		}
+		if best != nil && priority >= bestPriority {
+			continue
+		}
+		var timeout time.Duration
+		if extSvc.Spec.Timeout != nil {
+			d, err := time.ParseDuration(string(*extSvc.Spec.Timeout))
+			if err == nil {
+				timeout = d
+			}
+		}
+		samplingRate, serviceName, customTags := kubegw.ParseTracingData(extSvc.Spec.Data)
+		best = &kubegw.TracingConfig{
+			Host:         string(extSvc.Spec.Endpoint.Host),
+			Port:         int(extSvc.Spec.Endpoint.Port),
+			Protocol:     string(extSvc.Spec.Endpoint.Protocol),
+			Timeout:      timeout,
+			SamplingRate: samplingRate,
+			ServiceName:  serviceName,
+			CustomTags:   customTags,
+		}
+		bestPriority = priority
+	}
+	return best
+}
+
 // httpRouteAttachesToGateway checks whether the named HTTPRoute has a parentRef pointing to the given gateway.
 func (c *Controller) httpRouteAttachesToGateway(routeNamespace, routeName string, gw types.NamespacedName) bool {
 	for _, hr := range c.inputs.HTTPRoutes.List() {

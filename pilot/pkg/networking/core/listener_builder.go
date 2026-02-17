@@ -397,6 +397,16 @@ func (lb *ListenerBuilder) buildHTTPConnectionManager(httpOpts *httpListenerOpts
 
 	reqIDExtensionCtx := configureTracing(lb.push, lb.node, connectionManager, httpOpts.class, httpOpts.policySvc)
 
+	// GEP 5000: override tracing provider if an XGatewayExternalService of type Tracing targets this gateway.
+	if kubeGwName, ok := lb.node.Labels[label.IoK8sNetworkingGatewayGatewayName.Name]; ok {
+		gwNN := types.NamespacedName{Name: kubeGwName, Namespace: lb.node.GetNamespace()}
+		if lb.push.GatewayAPIController != nil {
+			if tc := lb.push.GatewayAPIController.TracingConfig(gwNN); tc != nil {
+				applyGEP5000Tracing(connectionManager, tc)
+			}
+		}
+	}
+
 	filters := []*hcm.HttpFilter{}
 	if !httpOpts.isWaypoint {
 		wasm := lb.push.WasmPluginsByListenerInfo(lb.node, model.WasmPluginListenerInfo{
