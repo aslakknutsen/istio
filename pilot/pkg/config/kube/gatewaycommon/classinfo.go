@@ -58,6 +58,9 @@ var BuiltinGatewayClasses = GetBuiltinGatewayClasses()
 // AgentgatewayClasses contains the built-in agentgateway classes.
 var AgentgatewayClasses = GetAgentGatewayClasses()
 
+// GwXdsClasses contains the gwxds gateway classes.
+var GwXdsClasses = GetGwXdsClasses()
+
 // AllClasses contains all classes, including built-in and agentgateway.
 var AllClasses = GetAllClasses()
 
@@ -92,10 +95,22 @@ func GetAgentGatewayClasses() map[gateway.ObjectName]gateway.GatewayController {
 	return res
 }
 
+// GetGwXdsClasses returns the gwxds gateway class mapping.
+func GetGwXdsClasses() map[gateway.ObjectName]gateway.GatewayController {
+	res := map[gateway.ObjectName]gateway.GatewayController{}
+	if features.EnableGwXds {
+		res[constants.GwXdsClassName] = constants.ManagedGwXdsController
+	}
+	return res
+}
+
 // GetAllClasses returns the mapping of all classes, including built-in and agentgateway.
 func GetAllClasses() map[gateway.ObjectName]gateway.GatewayController {
 	res := GetBuiltinGatewayClasses()
 	for k, v := range GetAgentGatewayClasses() {
+		res[k] = v
+	}
+	for k, v := range GetGwXdsClasses() {
 		res[k] = v
 	}
 	return res
@@ -145,6 +160,18 @@ func GetClassInfos() map[gateway.GatewayController]ClassInfo {
 			Controller:          constants.ManagedAgentgatewayController,
 			Description:         "Istio with Agentgateway",
 			Templates:           "agentgateway",
+			DisableNameSuffix:   true,
+			DefaultServiceType:  corev1.ServiceTypeLoadBalancer,
+			AddressType:         gateway.HostnameAddressType,
+			ControllerLabel:     constants.ManagedGatewayControllerLabel,
+			SupportsListenerSet: true,
+		}
+	}
+	if features.EnableGwXds {
+		m[constants.ManagedGwXdsController] = ClassInfo{
+			Controller:          constants.ManagedGwXdsController,
+			Description:         "Neutral xDS output for generic xDS-capable proxies",
+			Templates:           "gwxds",
 			DisableNameSuffix:   true,
 			DefaultServiceType:  corev1.ServiceTypeLoadBalancer,
 			AddressType:         gateway.HostnameAddressType,

@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package agentgateway
+package gatewaycommon
 
 import (
 	"fmt"
 	"sort"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/host"
 	"istio.io/istio/pkg/config/schema/gvk"
 	"istio.io/istio/pkg/kube/controllers"
@@ -37,7 +37,7 @@ type RouteParentReference struct {
 	// InternalName refers to the internal name of the parent we can reference it by. For example "my-ns/my-gateway"
 	InternalName string
 	// InternalKind is the Group/Kind of the Parent
-	InternalKind schema.GroupVersionKind
+	InternalKind config.GroupVersionKind
 	// DeniedReason, if present, indicates why the reference was not valid
 	DeniedReason *ParentError
 	// OriginalReference contains the original reference
@@ -45,7 +45,7 @@ type RouteParentReference struct {
 	// Hostname is the hostname match of the Parent, if any
 	Hostname        string
 	BannedHostnames sets.Set[string]
-	ParentKey       AgwParentKey
+	ParentKey       ParentKey
 	ParentSection   gatewayv1.SectionName
 	Accepted        bool
 	ParentGateway   types.NamespacedName
@@ -65,31 +65,30 @@ func defaultString[T ~string](s *T, def string) string {
 	return string(*s)
 }
 
-func toInternalParentReference(p gatewayv1.ParentReference, localNamespace string) (AgwParentKey, error) {
-	ref := normalizeReference(p.Group, p.Kind, gvk.KubernetesGateway)
+func toInternalParentReference(p gatewayv1.ParentReference, localNamespace string) (ParentKey, error) {
+	ref := NormalizeReference(p.Group, p.Kind, gvk.KubernetesGateway)
 	if !allowedParentReferences.Contains(ref) {
-		return AgwParentKey{}, fmt.Errorf("unsupported parent: %v/%v", p.Group, p.Kind)
+		return ParentKey{}, fmt.Errorf("unsupported parent: %v/%v", p.Group, p.Kind)
 	}
-	return AgwParentKey{
-		Kind: ref.Kubernetes(),
+	return ParentKey{
+		Kind: ref,
 		Name: string(p.Name),
 		// Unset namespace means "same namespace"
 		Namespace: defaultString(p.Namespace, localNamespace),
 	}, nil
 }
 
-// ReferenceAllowed validates if a route can reference a specified parent based on rules like section, port, and hostnames.
-// Returns a *ParentError if the reference violates any constraints or is disallowed.
-// Returns nil if the reference is valid and permitted for the given route and ParentInfo.
+// ReferenceAllowed validates if a route can reference a specified parent based on rules like
+// section, port, and hostnames. Returns a *ParentError if the reference is denied, nil otherwise.
 func ReferenceAllowed(
 	ctx RouteContext,
-	parent *AgwParentInfo,
-	routeKind schema.GroupVersionKind,
+	parent *ParentInfo,
+	routeKind config.GroupVersionKind,
 	parentRef ParentReference,
 	hostnames []gatewayv1.Hostname,
 	localNamespace string,
 ) *ParentError {
-	if parentRef.Kind == gvk.Service.Kubernetes() {
+	if parentRef.Kind == gvk.Service {
 		key := parentRef.Namespace + "/" + parentRef.Name
 
 		// check that the referenced svc exists
@@ -99,7 +98,7 @@ func ReferenceAllowed(
 				Message: fmt.Sprintf("parent service: %q not found", parentRef.Name),
 			}
 		}
-	} else if parentRef.Kind == gvk.ServiceEntry.Kubernetes() {
+	} else if parentRef.Kind == gvk.ServiceEntry {
 		// check that the referenced svc entry exists
 		key := parentRef.Namespace + "/" + parentRef.Name
 		if !krt.ResourceExists(ctx.Krt, ctx.ServiceEntries, key) {
@@ -191,7 +190,8 @@ func ReferenceAllowed(
 	return nil
 }
 
-// parentRefString creates a string representation of a ParentReference for consistent ordering and comparison in tests and logging
+// parentRefString creates a string representation of a ParentReference for consistent ordering
+// and comparison in tests and logging.
 // example output: "gateway.networking.k8s.io/KubernetesGateway/my-gateway/sectionName/8080/ns1"
 func parentRefString(ref gatewayv1.ParentReference) string {
 	return fmt.Sprintf("%s/%s/%s/%s/%d.%s",
@@ -203,7 +203,8 @@ func parentRefString(ref gatewayv1.ParentReference) string {
 		ptr.OrEmpty(ref.Namespace))
 }
 
-// extractParentReferenceInfo extracts the parent reference information for a given route, including any errors related to invalid references
+// extractParentReferenceInfo extracts the parent reference information for a given route,
+// including any errors related to invalid references.
 func extractParentReferenceInfo(ctx RouteContext, parents RouteParents, obj controllers.Object) []RouteParentReference {
 	routeRefs, hostnames, kind := GetCommonRouteInfo(obj)
 	localNamespace := obj.GetNamespace()
@@ -214,13 +215,13 @@ func extractParentReferenceInfo(ctx RouteContext, parents RouteParents, obj cont
 			continue
 		}
 		pk := ParentReference{
-			AgwParentKey: ir,
-			SectionName:  ptr.OrEmpty(ref.SectionName),
-			Port:         ptr.OrEmpty(ref.Port),
+			ParentKey:   ir,
+			SectionName: ptr.OrEmpty(ref.SectionName),
+			Port:        ptr.OrEmpty(ref.Port),
 		}
 		gk := ir
 		currentParents := parents.fetch(ctx.Krt, gk)
-		appendParent := func(pr *AgwParentInfo, pk ParentReference) {
+		appendParent := func(pr *ParentInfo, pk ParentReference) {
 			bannedHostnames := sets.New[string]()
 			for _, gw := range currentParents {
 				if gw == pr {
@@ -234,7 +235,7 @@ func extractParentReferenceInfo(ctx RouteContext, parents RouteParents, obj cont
 				}
 				bannedHostnames.Insert(gw.OriginalHostname)
 			}
-			deniedReason := ReferenceAllowed(ctx, pr, kind.Kubernetes(), pk, hostnames, localNamespace)
+			deniedReason := ReferenceAllowed(ctx, pr, kind, pk, hostnames, localNamespace)
 
 			rpi := RouteParentReference{
 				ParentGateway:     pr.ParentGateway,

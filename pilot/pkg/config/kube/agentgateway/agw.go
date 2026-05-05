@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"istio.io/istio/pilot/pkg/config/kube/gatewaycommon"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/schema/gvk"
 	"istio.io/istio/pkg/log"
@@ -32,7 +33,7 @@ import (
 )
 
 // CreateAgwMethodMatch creates an agw MethodMatch from a HTTPRouteMatch.
-func CreateAgwMethodMatch(match gatewayv1.HTTPRouteMatch) (*api.MethodMatch, *Condition) {
+func CreateAgwMethodMatch(match gatewayv1.HTTPRouteMatch) (*api.MethodMatch, *gatewaycommon.Condition) {
 	if match.Method == nil {
 		return nil, nil
 	}
@@ -42,7 +43,7 @@ func CreateAgwMethodMatch(match gatewayv1.HTTPRouteMatch) (*api.MethodMatch, *Co
 }
 
 // CreateAgwQueryMatch creates an agw QueryMatch from a HTTPRouteMatch.
-func CreateAgwQueryMatch(match gatewayv1.HTTPRouteMatch) ([]*api.QueryMatch, *Condition) {
+func CreateAgwQueryMatch(match gatewayv1.HTTPRouteMatch) ([]*api.QueryMatch, *gatewaycommon.Condition) {
 	res := []*api.QueryMatch{}
 	for _, header := range match.QueryParams {
 		tp := gatewayv1.QueryParamMatchExact
@@ -62,10 +63,10 @@ func CreateAgwQueryMatch(match gatewayv1.HTTPRouteMatch) ([]*api.QueryMatch, *Co
 			})
 		default:
 			// Should never happen, unless a new field is added
-			return nil, &Condition{
-				status: metav1.ConditionFalse,
-				error: &ConfigError{
-					Reason:  ConfigErrorReason(gatewayv1.RouteReasonUnsupportedValue),
+			return nil, &gatewaycommon.Condition{
+				Status: metav1.ConditionFalse,
+				Error: &gatewaycommon.ConfigError{
+					Reason:  gatewaycommon.ConfigErrorReason(gatewayv1.RouteReasonUnsupportedValue),
 					Message: fmt.Sprintf("unknown type: %q is not supported QueryMatch type", tp),
 				},
 			}
@@ -78,7 +79,7 @@ func CreateAgwQueryMatch(match gatewayv1.HTTPRouteMatch) ([]*api.QueryMatch, *Co
 }
 
 // CreateAgwPathMatch creates an agw PathMatch from a HTTPRouteMatch.
-func CreateAgwPathMatch(match gatewayv1.HTTPRouteMatch) (*api.PathMatch, *Condition) {
+func CreateAgwPathMatch(match gatewayv1.HTTPRouteMatch) (*api.PathMatch, *gatewaycommon.Condition) {
 	if match.Path == nil {
 		return nil, nil
 	}
@@ -125,10 +126,10 @@ func CreateAgwPathMatch(match gatewayv1.HTTPRouteMatch) (*api.PathMatch, *Condit
 		}, nil
 	default:
 		// Defensive: unknown type => UnsupportedValue.
-		return nil, &Condition{
-			status: metav1.ConditionFalse,
-			error: &ConfigError{
-				Reason:  ConfigErrorReason(gatewayv1.RouteReasonUnsupportedValue),
+		return nil, &gatewaycommon.Condition{
+			Status: metav1.ConditionFalse,
+			Error: &gatewaycommon.ConfigError{
+				Reason:  gatewaycommon.ConfigErrorReason(gatewayv1.RouteReasonUnsupportedValue),
 				Message: fmt.Sprintf("unsupported Path match type %q", tp),
 			},
 		}
@@ -136,7 +137,7 @@ func CreateAgwPathMatch(match gatewayv1.HTTPRouteMatch) (*api.PathMatch, *Condit
 }
 
 // CreateAgwHeadersMatch creates an agw HeadersMatch from a HTTPRouteMatch.
-func CreateAgwHeadersMatch(match gatewayv1.HTTPRouteMatch) ([]*api.HeaderMatch, *Condition) {
+func CreateAgwHeadersMatch(match gatewayv1.HTTPRouteMatch) ([]*api.HeaderMatch, *gatewaycommon.Condition) {
 	var res []*api.HeaderMatch
 	for _, header := range match.Headers {
 		tp := gatewayv1.HeaderMatchExact
@@ -156,10 +157,10 @@ func CreateAgwHeadersMatch(match gatewayv1.HTTPRouteMatch) ([]*api.HeaderMatch, 
 			})
 		default:
 			// Should never happen, unless a new field is added
-			return nil, &Condition{
-				status: metav1.ConditionFalse,
-				error: &ConfigError{
-					Reason:  ConfigErrorReason(gatewayv1.RouteReasonUnsupportedValue),
+			return nil, &gatewaycommon.Condition{
+				Status: metav1.ConditionFalse,
+				Error: &gatewaycommon.ConfigError{
+					Reason:  gatewaycommon.ConfigErrorReason(gatewayv1.RouteReasonUnsupportedValue),
 					Message: fmt.Sprintf("unknown type: %q is not supported HeaderMatch type", tp),
 				},
 			}
@@ -231,7 +232,7 @@ func CreateAgwMirrorFilter(
 	filter *gatewayv1.HTTPRequestMirrorFilter,
 	ns string,
 	k config.GroupVersionKind,
-) (*api.RequestMirrors_Mirror, *Condition) {
+) (*api.RequestMirrors_Mirror, *gatewaycommon.Condition) {
 	if filter == nil {
 		return nil, nil
 	}
@@ -272,7 +273,7 @@ func CreateAgwExternalAuthFilter(
 	filter *gatewayv1.HTTPExternalAuthFilter,
 	ns string,
 	k config.GroupVersionKind,
-) (*api.TrafficPolicySpec, *Condition) {
+) (*api.TrafficPolicySpec, *gatewaycommon.Condition) {
 	if filter == nil {
 		return nil, nil
 	}
@@ -350,7 +351,7 @@ func CreateAgwExternalAuthFilter(
 }
 
 // CreateAgwGRPCHeadersMatch creates an agw HeaderMatch from a GRPCRouteMatch.
-func CreateAgwGRPCHeadersMatch(match gatewayv1.GRPCRouteMatch) ([]*api.HeaderMatch, *Condition) {
+func CreateAgwGRPCHeadersMatch(match gatewayv1.GRPCRouteMatch) ([]*api.HeaderMatch, *gatewaycommon.Condition) {
 	var res []*api.HeaderMatch
 	for _, header := range match.Headers {
 		tp := gatewayv1.GRPCHeaderMatchExact
@@ -370,10 +371,10 @@ func CreateAgwGRPCHeadersMatch(match gatewayv1.GRPCRouteMatch) ([]*api.HeaderMat
 			})
 		default:
 			// Should never happen, unless a new field is added
-			return nil, &Condition{
-				status: metav1.ConditionFalse,
-				error: &ConfigError{
-					Reason:  ConfigErrorReason(gatewayv1.RouteReasonUnsupportedValue),
+			return nil, &gatewaycommon.Condition{
+				Status: metav1.ConditionFalse,
+				Error: &gatewaycommon.ConfigError{
+					Reason:  gatewaycommon.ConfigErrorReason(gatewayv1.RouteReasonUnsupportedValue),
 					Message: fmt.Sprintf("unknown type: %q is not supported HeaderMatch type", tp),
 				},
 			}
@@ -437,9 +438,9 @@ func BuildAgwGRPCTrafficPolicies(
 	ctx RouteContext,
 	ns string,
 	inputFilters []gatewayv1.GRPCRouteFilter,
-) ([]*api.TrafficPolicySpec, *Condition) {
+) ([]*api.TrafficPolicySpec, *gatewaycommon.Condition) {
 	var policies []*api.TrafficPolicySpec
-	var mirrorBackendErr *Condition
+	var mirrorBackendErr *gatewaycommon.Condition
 	// Collect multiples of same-type filters to merge
 	var mergedReqHdr *api.HeaderModifier
 	var mergedRespHdr *api.HeaderModifier
@@ -466,10 +467,10 @@ func BuildAgwGRPCTrafficPolicies(
 				mergedMirror = append(mergedMirror, h)
 			}
 		default:
-			return nil, &Condition{
-				status: metav1.ConditionFalse,
-				error: &ConfigError{
-					Reason:  ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
+			return nil, &gatewaycommon.Condition{
+				Status: metav1.ConditionFalse,
+				Error: &gatewaycommon.ConfigError{
+					Reason:  gatewaycommon.ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
 					Message: fmt.Sprintf("unsupported filter type %q", filter.Type),
 				},
 			}
@@ -492,9 +493,9 @@ func BuildAgwGRPCBackendPolicies(
 	ctx RouteContext,
 	ns string,
 	inputFilters []gatewayv1.GRPCRouteFilter,
-) ([]*api.BackendPolicySpec, *Condition) {
+) ([]*api.BackendPolicySpec, *gatewaycommon.Condition) {
 	var policies []*api.BackendPolicySpec
-	var mirrorBackendErr *Condition
+	var mirrorBackendErr *gatewaycommon.Condition
 	// Collect multiples of same-type filters to merge
 	var mergedReqHdr *api.HeaderModifier
 	var mergedRespHdr *api.HeaderModifier
@@ -521,10 +522,10 @@ func BuildAgwGRPCBackendPolicies(
 				mergedMirror = append(mergedMirror, h)
 			}
 		default:
-			return nil, &Condition{
-				status: metav1.ConditionFalse,
-				error: &ConfigError{
-					Reason:  ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
+			return nil, &gatewaycommon.Condition{
+				Status: metav1.ConditionFalse,
+				Error: &gatewaycommon.ConfigError{
+					Reason:  gatewaycommon.ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
 					Message: fmt.Sprintf("unsupported filter type %q", filter.Type),
 				},
 			}
@@ -547,12 +548,12 @@ func buildAgwGRPCDestination(
 	ctx RouteContext,
 	forwardTo []gatewayv1.GRPCBackendRef,
 	ns string,
-) ([]*api.RouteBackend, *Condition, *Condition) {
+) ([]*api.RouteBackend, *gatewaycommon.Condition, *gatewaycommon.Condition) {
 	if forwardTo == nil {
 		return nil, nil, nil
 	}
 
-	var invalidBackendErr *Condition
+	var invalidBackendErr *gatewaycommon.Condition
 	var res []*api.RouteBackend
 	for _, fwd := range forwardTo {
 		dst, err := buildAgwDestination(ctx, gatewayv1.HTTPBackendRef{

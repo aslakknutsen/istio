@@ -77,6 +77,7 @@ const (
 	Waypoint     = pm.Waypoint
 	Ztunnel      = pm.Ztunnel
 	Agentgateway = pm.Agentgateway
+	GwXds        = pm.GwXds
 
 	IPv4 = pm.IPv4
 	IPv6 = pm.IPv6
@@ -150,6 +151,9 @@ type Environment struct {
 
 	// AgentgatewayController is the controller for agentgateway.
 	AgentgatewayController AgentgatewayController
+
+	// GwXdsController is the controller for the gwxds neutral xDS package.
+	GwXdsController GwXdsReconciler
 
 	// EndpointShards for a service. This is a global (per-server) list, built from
 	// incremental updates. This is keyed by service and namespace
@@ -1111,6 +1115,13 @@ type AgentgatewayController interface {
 	// called before any List/Get calls if the state has changed
 	// Required for current status implementation
 	Reconcile(ctx *PushContext)
+}
+
+// GwXdsReconciler is implemented by controllers that produce neutral xDS resources
+// from Gateway API objects. It is called once per push to update the gateway context.
+type GwXdsReconciler interface {
+	// Reconcile updates the internal gateway context for this push cycle.
+	Reconcile(ps *PushContext)
 }
 
 // OutboundListenerClass is a helper to turn a NodeType for outbound to a ListenerClass.

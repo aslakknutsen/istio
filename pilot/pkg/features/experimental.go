@@ -33,6 +33,10 @@ var (
 		false,
 		"If enabled, the istio-agentgateway GatewayClass will be enabled.").Get()
 
+	EnableGwXds = env.Register("PILOT_ENABLE_GWXDS",
+		false,
+		"If enabled, the istio-gwxds GatewayClass will be enabled, producing neutral xDS output for generic xDS-capable proxies.").Get()
+
 	// GlobalSendUnhealthyEndpoints contains the raw setting on GlobalSendUnhealthyEndpoints. This should be checked per-service
 	GlobalSendUnhealthyEndpoints = atomic.NewBool(env.Register(
 		"PILOT_SEND_UNHEALTHY_ENDPOINTS",

@@ -2599,6 +2599,9 @@ func (ps *PushContext) initKubernetesGateways(env *Environment) {
 		ps.AgentgatewayController = env.AgentgatewayController
 		env.AgentgatewayController.Reconcile(ps)
 	}
+	if env.GwXdsController != nil && features.EnableGwXds {
+		env.GwXdsController.Reconcile(ps)
+	}
 }
 
 // TODO(jaellio): support for agentgatewaycontroller (?)

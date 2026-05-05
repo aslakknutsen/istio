@@ -225,11 +225,9 @@ func (s *DiscoveryServer) CachesSynced() {
 }
 
 func (s *DiscoveryServer) IsServerReady() bool {
-	if features.EnableAgentgateway {
-		for _, r := range s.registrations {
-			if !r.HasSynced() {
-				return false
-			}
+	for _, r := range s.registrations {
+		if !r.HasSynced() {
+			return false
 		}
 	}
 	return s.serverReady.Load()
@@ -242,10 +240,8 @@ func (s *DiscoveryServer) Start(stopCh <-chan struct{}) {
 	go s.sendPushes(stopCh)
 	go s.Cache.Run(stopCh)
 
-	if features.EnableAgentgateway {
-		for _, reg := range s.registrations {
-			go reg.Start(stopCh)
-		}
+	for _, reg := range s.registrations {
+		go reg.Start(stopCh)
 	}
 }
 

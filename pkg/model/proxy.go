@@ -513,12 +513,16 @@ const (
 
 	// Agentgateway type is used for Agentgateway
 	Agentgateway NodeType = "agentgateway"
+
+	// GwXds type is used for gwxds-capable proxies (e.g. praxis) that receive
+	// proxy-neutral xDS resources via the gwxds controller.
+	GwXds NodeType = "gwxds"
 )
 
 // IsApplicationNodeType verifies that the NodeType is one of the declared constants in the model
 func IsApplicationNodeType(nType NodeType) bool {
 	switch nType {
-	case SidecarProxy, Router, Waypoint, Ztunnel, Agentgateway:
+	case SidecarProxy, Router, Waypoint, Ztunnel, Agentgateway, GwXds:
 		return true
 	default:
 		return false

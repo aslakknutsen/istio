@@ -157,13 +157,13 @@ func TestCreateAgwPathMatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, cond := CreateAgwPathMatch(tt.match)
 			if tt.wantError {
-				if cond == nil || cond.error == nil {
+				if cond == nil || cond.Error == nil {
 					t.Fatal("expected error condition but got nil")
 				}
 				return
 			}
-			if cond != nil && cond.error != nil {
-				t.Fatalf("unexpected error: %v", cond.error.Message)
+			if cond != nil && cond.Error != nil {
+				t.Fatalf("unexpected error: %v", cond.Error.Message)
 			}
 			assert.Equal(t, got, tt.want)
 		})
@@ -262,13 +262,13 @@ func TestCreateAgwHeadersMatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, cond := CreateAgwHeadersMatch(tt.match)
 			if tt.wantError {
-				if cond == nil || cond.error == nil {
+				if cond == nil || cond.Error == nil {
 					t.Fatal("expected error condition but got nil")
 				}
 				return
 			}
-			if cond != nil && cond.error != nil {
-				t.Fatalf("unexpected error: %v", cond.error.Message)
+			if cond != nil && cond.Error != nil {
+				t.Fatalf("unexpected error: %v", cond.Error.Message)
 			}
 			assert.Equal(t, got, tt.want)
 		})
@@ -352,13 +352,13 @@ func TestCreateAgwQueryMatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, cond := CreateAgwQueryMatch(tt.match)
 			if tt.wantError {
-				if cond == nil || cond.error == nil {
+				if cond == nil || cond.Error == nil {
 					t.Fatal("expected error condition but got nil")
 				}
 				return
 			}
-			if cond != nil && cond.error != nil {
-				t.Fatalf("unexpected error: %v", cond.error.Message)
+			if cond != nil && cond.Error != nil {
+				t.Fatalf("unexpected error: %v", cond.Error.Message)
 			}
 			assert.Equal(t, got, tt.want)
 		})
@@ -403,13 +403,13 @@ func TestCreateAgwMethodMatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, cond := CreateAgwMethodMatch(tt.match)
 			if tt.wantError {
-				if cond == nil || cond.error == nil {
+				if cond == nil || cond.Error == nil {
 					t.Fatal("expected error condition but got nil")
 				}
 				return
 			}
-			if cond != nil && cond.error != nil {
-				t.Fatalf("unexpected error: %v", cond.error.Message)
+			if cond != nil && cond.Error != nil {
+				t.Fatalf("unexpected error: %v", cond.Error.Message)
 			}
 			assert.Equal(t, got, tt.want)
 		})
@@ -790,13 +790,13 @@ func TestCreateAgwGRPCHeadersMatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, cond := CreateAgwGRPCHeadersMatch(tt.match)
 			if tt.wantError {
-				if cond == nil || cond.error == nil {
+				if cond == nil || cond.Error == nil {
 					t.Fatal("expected error condition but got nil")
 				}
 				return
 			}
-			if cond != nil && cond.error != nil {
-				t.Fatalf("unexpected error: %v", cond.error.Message)
+			if cond != nil && cond.Error != nil {
+				t.Fatalf("unexpected error: %v", cond.Error.Message)
 			}
 			assert.Equal(t, got, tt.want)
 		})

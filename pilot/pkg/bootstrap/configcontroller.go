@@ -40,6 +40,7 @@ import (
 	"istio.io/istio/pilot/pkg/config/kube/file"
 	"istio.io/istio/pilot/pkg/config/kube/gateway"
 	"istio.io/istio/pilot/pkg/config/kube/gatewaycommon"
+	"istio.io/istio/pilot/pkg/config/kube/gwxds"
 	ingress "istio.io/istio/pilot/pkg/config/kube/ingress"
 	"istio.io/istio/pilot/pkg/config/memory"
 	istioCredentials "istio.io/istio/pilot/pkg/credentials"
@@ -206,6 +207,17 @@ func (s *Server) initK8SConfigStore(args *PilotArgs) error {
 			s.environment.AgentgatewayController = agwc
 			s.agentgatewayController = agwc
 			s.ConfigStores = append(s.ConfigStores, s.environment.AgentgatewayController)
+		}
+
+		// Create the gwxds controller behind the EnableGwXds feature flag.
+		if features.EnableGwXds {
+			gwxdsController := gwxds.NewController(s.kubeClient, s.kubeClient.CrdWatcher().WaitForCRD, args.RegistryOptions.KubeOptions)
+			s.gwxdsController = gwxdsController
+			s.environment.GwXdsController = gwxdsController
+			s.addStartFunc("gwxds controller", func(stop <-chan struct{}) error {
+				gwxdsController.Run(stop)
+				return nil
+			})
 		}
 
 		// Use a channel to signal activation of per-revision status writer

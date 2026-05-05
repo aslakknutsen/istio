@@ -56,6 +56,10 @@ func FetchGatewayClass(ctx krt.HandlerContext, gatewayClasses krt.Collection[Gat
 		// class we should return nil immediately
 		return nil
 	}
+	if _, f := GwXdsClasses[gc]; f {
+		// Similarly, gwxds classes are managed by the gwxds controller, not this one.
+		return nil
+	}
 	class := krt.FetchOne(ctx, gatewayClasses, krt.FilterKey(string(gc)))
 	if class == nil {
 		if bc, f := BuiltinGatewayClasses[gc]; f {
@@ -71,21 +75,3 @@ func FetchGatewayClass(ctx krt.HandlerContext, gatewayClasses krt.Collection[Gat
 	return class
 }
 
-func FetchAgentgatewayClass(ctx krt.HandlerContext, gatewayClasses krt.Collection[GatewayClass], gc gatewayv1.ObjectName) *GatewayClass {
-	bc, f := AgentgatewayClasses[gc]
-	if !f {
-		// This function is only for fetching the agentgateway classes managed by the agentgateway controller, if the name doesn't match
-		// we should return nil immediately
-		// No gateway class found, this may be meant for another controller; should be skipped.
-		return nil
-	}
-	class := krt.FetchOne(ctx, gatewayClasses, krt.FilterKey(string(gc)))
-	if class == nil {
-		// We allow some classes to exist without being in the cluster
-		return &GatewayClass{
-			Name:       string(gc),
-			Controller: bc,
-		}
-	}
-	return class
-}

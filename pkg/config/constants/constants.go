@@ -170,6 +170,7 @@ const (
 	ManagedGatewayMeshControllerLabel     = "istio.io-mesh-controller"
 	ManagedGatewayMeshController          = "istio.io/mesh-controller"
 	ManagedAgentgatewayController         = "istio.io/agentgateway-controller"
+	ManagedGwXdsController                = "istio.io/gwxds-controller"
 	ManagedGatewayEastWestController      = "istio.io/eastwest-controller"
 	ManagedGatewayEastWestControllerLabel = "istio.io-eastwest-controller"
 
@@ -180,6 +181,7 @@ const (
 	RemoteGatewayClassName   = "istio-remote"
 	WaypointGatewayClassName = "istio-waypoint"
 	AgentgatewayClassName    = "istio-agentgateway"
+	GwXdsClassName           = "istio-gwxds"
 	EastWestGatewayClassName = "istio-east-west"
 
 	// TODO formalize this API

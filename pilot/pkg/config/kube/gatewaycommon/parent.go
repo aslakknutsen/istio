@@ -12,73 +12,87 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package agentgateway
+package gatewaycommon
 
 import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"istio.io/istio/pkg/config"
-	"istio.io/istio/pkg/config/schema/collections"
+	"istio.io/istio/pkg/ptr"
+	"istio.io/istio/pkg/slices"
 )
 
-const (
-	gatewayTLSTerminateModeKey = "gateway.istio.io/tls-terminate-mode"
-	addressTypeOverride        = "networking.istio.io/address-type"
-	gatewayClassDefaults       = "gateway.istio.io/defaults-for-class"
-	gatewayTLSCipherSuites     = "gateway.istio.io/tls-cipher-suites"
-)
-
-// AgwParentKey holds info about a parentRef (eg route binding to a Gateway). This is a mirror of
-// gwv1.ParentReference in a form that can be stored in a map
-type AgwParentKey struct {
-	Kind schema.GroupVersionKind
-	// Name is the original name of the resource (eg Kubernetes Gateway name)
+// ParentKey holds info about a parentRef (e.g. a route binding to a Gateway). It is a
+// map-friendly representation of gatewayv1.ParentReference.
+type ParentKey struct {
+	Kind config.GroupVersionKind
+	// Name is the original name of the resource (e.g. Kubernetes Gateway name)
 	Name string
 	// Namespace is the namespace of the resource
 	Namespace string
 }
 
-func (p AgwParentKey) String() string {
+func (p ParentKey) String() string {
 	return p.Kind.String() + "/" + p.Namespace + "/" + p.Name
 }
 
 // ParentReference holds the parent key, section name and port for a parent reference.
 type ParentReference struct {
-	AgwParentKey
+	ParentKey
 
 	SectionName gatewayv1.SectionName
 	Port        gatewayv1.PortNumber
 }
 
 func (p ParentReference) String() string {
-	return p.AgwParentKey.String() + "/" + string(p.SectionName) + "/" + fmt.Sprint(p.Port)
+	return p.ParentKey.String() + "/" + string(p.SectionName) + "/" + fmt.Sprint(p.Port)
 }
 
-// AgwParentInfo holds info about a "Parent" - something that can be referenced as a ParentRef in the API.
-// Today, this is just Gateway
-type AgwParentInfo struct {
+// ParentInfo holds info about a "Parent" — something that can be referenced as a ParentRef in the
+// Gateway API. Today this is just Gateway.
+type ParentInfo struct {
 	ParentGateway types.NamespacedName
 	// +krtEqualsTodo ensure gateway class changes trigger equality differences
 	ParentGatewayClassName string
-	// InternalName refers to the internal name we can reference it by. For example "my-ns/my-gateway"
+	// InternalName refers to the internal name we can reference the parent by, e.g. "my-ns/my-gateway"
 	InternalName string
 	// AllowedKinds indicates which kinds can be admitted by this Parent
 	AllowedKinds []gatewayv1.RouteGroupKind
-	// Hostnames is the hostnames that must be match to reference to the Parent. For gateway this is listener hostname
-	// Format is ns/hostname
+	// Hostnames is the hostnames that must match to reference to the Parent (listener hostname).
+	// Format is ns/hostname.
 	Hostnames []string
-	// OriginalHostname is the unprocessed form of Hostnames; how it appeared in users' config
+	// OriginalHostname is the unprocessed form of Hostnames as it appeared in user config
 	OriginalHostname string
 
 	SectionName    gatewayv1.SectionName
 	Port           gatewayv1.PortNumber
 	Protocol       gatewayv1.ProtocolType
 	TLSPassthrough bool
+}
+
+func (g ParentInfo) Equals(other ParentInfo) bool {
+	return g.ParentGateway == other.ParentGateway &&
+		g.InternalName == other.InternalName &&
+		g.OriginalHostname == other.OriginalHostname &&
+		g.SectionName == other.SectionName &&
+		g.Port == other.Port &&
+		g.Protocol == other.Protocol &&
+		g.TLSPassthrough == other.TLSPassthrough &&
+		slices.EqualFunc(g.AllowedKinds, other.AllowedKinds, func(a, b gatewayv1.RouteGroupKind) bool {
+			return a.Kind == b.Kind && ptr.Equal(a.Group, b.Group)
+		}) &&
+		slices.Equal(g.Hostnames, other.Hostnames)
+}
+
+// TLSInfo contains the resolved TLS certificate material for a gateway listener.
+type TLSInfo struct {
+	Cert   []byte
+	CaCert []byte
+	Key    []byte `json:"-"`
 }
 
 // ConfigErrorReason represents a reason for a configuration error.
@@ -111,19 +125,20 @@ type ConfigError struct {
 	Message string
 }
 
+// Condition represents a Kubernetes status condition with optional error state.
 type Condition struct {
 	// reason defines the reason to report on success. Ignored if error is set
-	reason string
+	Reason string
 	// message defines the message to report on success. Ignored if error is set
-	message string
-	// status defines the status to report on success. The inverse will be set if error is set
-	// If not set, will default to StatusTrue
-	status metav1.ConditionStatus
-	// error defines an error state; the reason and message will be replaced with that of the error and
+	Message string
+	// status defines the status to report on success. The inverse will be set if error is set.
+	// Defaults to StatusTrue when empty.
+	Status metav1.ConditionStatus
+	// Error defines an error state; the reason and message will be replaced with that of the error and
 	// the status inverted
-	error *ConfigError
-	// setOnce, if enabled, will only set the condition if it is not yet present or set to this reason
-	setOnce string
+	Error *ConfigError
+	// SetOnce, if set, will only set the condition if it is not yet present or set to this reason
+	SetOnce string
 }
 
 // ParentErrorReason describes why a parent reference was denied.
@@ -143,24 +158,3 @@ type ParentError struct {
 	Message string
 }
 
-// normalizeReference takes a generic Group/Kind (the API uses a few variations) and converts to a known GroupVersionKind.
-// Defaults for the group/kind are also passed.
-func normalizeReference[G ~string, K ~string](group *G, kind *K, def config.GroupVersionKind) config.GroupVersionKind {
-	k := def.Kind
-	if kind != nil {
-		k = string(*kind)
-	}
-	g := def.Group
-	if group != nil {
-		g = string(*group)
-	}
-	gk := config.GroupVersionKind{
-		Group: g,
-		Kind:  k,
-	}
-	s, f := collections.All.FindByGroupKind(gk)
-	if f {
-		return s.GroupVersionKind()
-	}
-	return gk
-}

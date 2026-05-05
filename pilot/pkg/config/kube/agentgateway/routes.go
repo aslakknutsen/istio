@@ -26,7 +26,7 @@ import (
 	gatewayalpha "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
-	"istio.io/istio/pkg/config"
+	"istio.io/istio/pilot/pkg/config/kube/gatewaycommon"
 	"istio.io/istio/pkg/config/schema/gvk"
 	"istio.io/istio/pkg/log"
 	"istio.io/istio/pkg/ptr"
@@ -178,7 +178,7 @@ func ApplyRetries(rule *gatewayv1.HTTPRouteRule, route *api.Route) error {
 // ConvertHTTPRouteToAgw converts a HTTPRouteRule to an agentgateway HTTPRoute
 func ConvertHTTPRouteToAgw(ctx RouteContext, r gatewayv1.HTTPRouteRule,
 	obj *gatewayv1.HTTPRoute, pos int, matchPos int,
-) (*api.Route, *Condition) {
+) (*api.Route, *gatewaycommon.Condition) {
 	routeRuleKey := strconv.Itoa(pos) + "." + strconv.Itoa(matchPos)
 	res := &api.Route{
 		// unique for route rule
@@ -189,8 +189,8 @@ func ConvertHTTPRouteToAgw(ctx RouteContext, r gatewayv1.HTTPRouteRule,
 	}
 
 	if err := processRouteMatches(&r, res); err != nil {
-		return nil, &Condition{
-			error: &ConfigError{
+		return nil, &gatewaycommon.Condition{
+			Error: &gatewaycommon.ConfigError{
 				Reason:  "InvalidMatch",
 				Message: fmt.Sprintf("failed to process route matches: %v", err),
 			},
@@ -201,16 +201,16 @@ func ConvertHTTPRouteToAgw(ctx RouteContext, r gatewayv1.HTTPRouteRule,
 	res.TrafficPolicies = policies
 
 	if err := ApplyTimeouts(&r, res); err != nil {
-		return nil, &Condition{
-			error: &ConfigError{
+		return nil, &gatewaycommon.Condition{
+			Error: &gatewaycommon.ConfigError{
 				Reason:  "TranslationError",
 				Message: fmt.Sprintf("failed to apply builtin route timeout: %v", err),
 			},
 		}
 	}
 	if err := ApplyRetries(&r, res); err != nil {
-		return nil, &Condition{
-			error: &ConfigError{
+		return nil, &gatewaycommon.Condition{
+			Error: &gatewaycommon.ConfigError{
 				Reason:  "TranslationError",
 				Message: fmt.Sprintf("failed to apply builtin route retries: %v", err),
 			},
@@ -238,7 +238,7 @@ func ConvertHTTPRouteToAgw(ctx RouteContext, r gatewayv1.HTTPRouteRule,
 // ConvertGRPCRouteToAgw converts a GRPCRouteRule to an agentgateway HTTPRoute
 func ConvertGRPCRouteToAgw(ctx RouteContext, r gatewayv1.GRPCRouteRule,
 	obj *gatewayv1.GRPCRoute, pos int,
-) (*api.Route, *Condition) {
+) (*api.Route, *gatewaycommon.Condition) {
 	routeRuleKey := strconv.Itoa(pos)
 	res := &api.Route{
 		// unique for route rule
@@ -307,7 +307,7 @@ func ConvertGRPCRouteToAgw(ctx RouteContext, r gatewayv1.GRPCRouteRule,
 // ConvertTCPRouteToAgw converts a TCPRouteRule to an agentgateway TCPRoute
 func ConvertTCPRouteToAgw(ctx RouteContext, r gatewayalpha.TCPRouteRule,
 	obj *gatewayalpha.TCPRoute, pos int,
-) (*api.TCPRoute, *Condition) {
+) (*api.TCPRoute, *gatewaycommon.Condition) {
 	routeRuleKey := strconv.Itoa(pos)
 	res := &api.TCPRoute{
 		// unique for route rule
@@ -331,7 +331,7 @@ func ConvertTCPRouteToAgw(ctx RouteContext, r gatewayalpha.TCPRouteRule,
 // ConvertTLSRouteToAgw converts a TLSRouteRule to an agentgateway TCPRoute
 func ConvertTLSRouteToAgw(ctx RouteContext, r gatewayv1.TLSRouteRule,
 	obj *gatewayv1.TLSRoute, pos int,
-) (*api.TCPRoute, *Condition) {
+) (*api.TCPRoute, *gatewaycommon.Condition) {
 	routeRuleKey := strconv.Itoa(pos)
 	res := &api.TCPRoute{
 		// unique for route rule
@@ -386,22 +386,6 @@ func GetStatus[I, IS any](spec I) IS {
 	}
 }
 
-// GetCommonRouteInfo extracts parent references, hostnames, and GVK from a route resource.
-func GetCommonRouteInfo(spec any) ([]gatewayv1.ParentReference, []gatewayv1.Hostname, config.GroupVersionKind) {
-	switch t := spec.(type) {
-	case *gatewayalpha.TCPRoute:
-		return t.Spec.ParentRefs, nil, gvk.TCPRoute
-	case *gatewayv1.TLSRoute:
-		return t.Spec.ParentRefs, t.Spec.Hostnames, gvk.TLSRoute
-	case *gatewayv1.HTTPRoute:
-		return t.Spec.ParentRefs, t.Spec.Hostnames, gvk.HTTPRoute
-	case *gatewayv1.GRPCRoute:
-		return t.Spec.ParentRefs, t.Spec.Hostnames, gvk.GRPCRoute
-	default:
-		log.Fatalf("unknown type %T", t)
-		return nil, nil, config.GroupVersionKind{}
-	}
-}
 
 // createAgwCorsFilter converts a gatewayv1.HTTPCORSFilter to an agentgateway TrafficPolicySpec with CORS configuration
 func createAgwCorsFilter(cors *gatewayv1.HTTPCORSFilter) *api.TrafficPolicySpec {
@@ -425,7 +409,7 @@ func createAgwCorsFilter(cors *gatewayv1.HTTPCORSFilter) *api.TrafficPolicySpec 
 // createAgwExtensionRefFilter creates Agw filter from Gateway API ExtensionRef filter
 func createAgwExtensionRefFilter(
 	extensionRef *gatewayv1.LocalObjectReference,
-) *Condition {
+) *gatewaycommon.Condition {
 	if extensionRef == nil {
 		return nil
 	}
@@ -434,9 +418,9 @@ func createAgwExtensionRefFilter(
 	// https://github.com/kgateway-dev/kgateway/issues/12037
 
 	// Unsupported ExtensionRef
-	return &Condition{
-		error: &ConfigError{
-			Reason:  ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
+	return &gatewaycommon.Condition{
+		Error: &gatewaycommon.ConfigError{
+			Reason:  gatewaycommon.ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
 			Message: fmt.Sprintf("unsupported ExtensionRef: %s/%s", extensionRef.Group, extensionRef.Kind),
 		},
 	}

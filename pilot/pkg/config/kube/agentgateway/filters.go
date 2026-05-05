@@ -21,6 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"istio.io/istio/pilot/pkg/config/kube/gatewaycommon"
 	"istio.io/istio/pkg/config/schema/gvk"
 	"istio.io/istio/pkg/slices"
 )
@@ -30,11 +31,11 @@ func BuildAgwTrafficPolicyFilters(
 	ctx RouteContext,
 	ns string,
 	inputFilters []gatewayv1.HTTPRouteFilter,
-) ([]*api.TrafficPolicySpec, *Condition) {
+) ([]*api.TrafficPolicySpec, *gatewaycommon.Condition) {
 	var policies []*api.TrafficPolicySpec
 	var hasTerminalFilter bool
 	var terminalFilterType string
-	var policyError *Condition
+	var policyError *gatewaycommon.Condition
 	// Collect multiples of same-type filters to merge
 	var mergedReqHdr *api.HeaderModifier
 	var mergedRespHdr *api.HeaderModifier
@@ -55,10 +56,10 @@ func BuildAgwTrafficPolicyFilters(
 			mergedRespHdr = mergeHeaderModifiers(mergedRespHdr, h)
 		case gatewayv1.HTTPRouteFilterRequestRedirect:
 			if hasTerminalFilter {
-				policyError = &Condition{
-					status: metav1.ConditionFalse,
-					error: &ConfigError{
-						Reason:  ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
+				policyError = &gatewaycommon.Condition{
+					Status: metav1.ConditionFalse,
+					Error: &gatewaycommon.ConfigError{
+						Reason:  gatewaycommon.ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
 						Message: terminalFilterCombinationError(terminalFilterType, "RequestRedirect"),
 					},
 				}
@@ -109,10 +110,10 @@ func BuildAgwTrafficPolicyFilters(
 				continue
 			}
 		default:
-			return nil, &Condition{
-				status: metav1.ConditionFalse,
-				error: &ConfigError{
-					Reason:  ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
+			return nil, &gatewaycommon.Condition{
+				Status: metav1.ConditionFalse,
+				Error: &gatewaycommon.ConfigError{
+					Reason:  gatewaycommon.ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
 					Message: fmt.Sprintf("unsupported filter type: %v", filter.Type),
 				},
 			}
@@ -136,11 +137,11 @@ func BuildAgwBackendPolicyFilters(
 	ctx RouteContext,
 	ns string,
 	inputFilters []gatewayv1.HTTPRouteFilter,
-) ([]*api.BackendPolicySpec, *Condition) {
+) ([]*api.BackendPolicySpec, *gatewaycommon.Condition) {
 	var policies []*api.BackendPolicySpec
 	var hasTerminalFilter bool
 	var terminalFilterType string
-	var policyError *Condition
+	var policyError *gatewaycommon.Condition
 	// Collect multiples of same-type filters to merge
 	var mergedReqHdr *api.HeaderModifier
 	var mergedRespHdr *api.HeaderModifier
@@ -161,10 +162,10 @@ func BuildAgwBackendPolicyFilters(
 			mergedRespHdr = mergeHeaderModifiers(mergedRespHdr, h)
 		case gatewayv1.HTTPRouteFilterRequestRedirect:
 			if hasTerminalFilter {
-				policyError = &Condition{
-					status: metav1.ConditionFalse,
-					error: &ConfigError{
-						Reason:  ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
+				policyError = &gatewaycommon.Condition{
+					Status: metav1.ConditionFalse,
+					Error: &gatewaycommon.ConfigError{
+						Reason:  gatewaycommon.ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
 						Message: terminalFilterCombinationError(terminalFilterType, "RequestRedirect"),
 					},
 				}
@@ -187,10 +188,10 @@ func BuildAgwBackendPolicyFilters(
 				mergedMirror = append(mergedMirror, h)
 			}
 		default:
-			return nil, &Condition{
-				status: metav1.ConditionFalse,
-				error: &ConfigError{
-					Reason:  ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
+			return nil, &gatewaycommon.Condition{
+				Status: metav1.ConditionFalse,
+				Error: &gatewaycommon.ConfigError{
+					Reason:  gatewaycommon.ConfigErrorReason(gatewayv1.RouteReasonIncompatibleFilters),
 					Message: fmt.Sprintf("unsupported filter type: %v", filter.Type),
 				},
 			}
@@ -247,12 +248,12 @@ func terminalFilterCombinationError(existingFilter, newFilter string) string {
 		"is allowed per route rule.", existingFilter, newFilter)
 }
 
-func isPolicyErrorCritical(filterError *Condition) bool {
+func isPolicyErrorCritical(filterError *gatewaycommon.Condition) bool {
 	criticalReasons := []gatewayv1.RouteConditionReason{
 		"FilterNotSupported",
 		"FilterConfigInvalid",
 		// Add other critical filter error reasons as needed
 	}
 
-	return slices.Contains(criticalReasons, gatewayv1.RouteConditionReason(filterError.reason))
+	return slices.Contains(criticalReasons, gatewayv1.RouteConditionReason(filterError.Reason))
 }
