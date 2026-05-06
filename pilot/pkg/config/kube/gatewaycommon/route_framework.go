@@ -22,6 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 	networkingclient "istio.io/client-go/pkg/apis/networking/v1"
 	"istio.io/istio/pkg/config"
@@ -43,6 +44,8 @@ type RouteContextInputs struct {
 	Services       krt.Collection[*corev1.Service]
 	Namespaces     krt.Collection[*corev1.Namespace]
 	ServiceEntries krt.Collection[*networkingclient.ServiceEntry]
+	// InferencePools is optional; use an empty static collection when unused.
+	InferencePools krt.Collection[*inferencev1.InferencePool]
 }
 
 func (i RouteContextInputs) WithCtx(krtctx krt.HandlerContext) RouteContext {
@@ -262,4 +265,3 @@ func ProcessParentReferences[T any, R any](
 
 	return resources
 }
-

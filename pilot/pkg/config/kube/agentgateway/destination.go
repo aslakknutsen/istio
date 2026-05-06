@@ -30,18 +30,18 @@ import (
 )
 
 // GetInferenceServiceHostname returns the fully qualified service hostname for InferencePools
-func GetInferenceServiceHostname(ctx RouteContext, name, namespace string) string {
+func GetInferenceServiceHostname(ctx gatewaycommon.RouteContext, name, namespace string) string {
 	return fmt.Sprintf("%s.%s.inference.%s", name, namespace, ctx.DomainSuffix)
 }
 
 // GetServiceHostname returns the fully qualified service hostname
-func GetServiceHostname(ctx RouteContext, name, namespace string) string {
+func GetServiceHostname(ctx gatewaycommon.RouteContext, name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.%s", name, namespace, ctx.DomainSuffix)
 }
 
 // buildAgwDestination builds the RouteBackend for a given HTTPBackendRef
 func buildAgwDestination(
-	ctx RouteContext,
+	ctx gatewaycommon.RouteContext,
 	to gatewayv1.HTTPBackendRef,
 	ns string,
 	k config.GroupVersionKind,
@@ -212,7 +212,7 @@ func buildAgwDestination(
 
 // buildAgwHTTPDestination builds RouteBackends for a list of HTTPBackendRefs.
 func buildAgwHTTPDestination(
-	ctx RouteContext,
+	ctx gatewaycommon.RouteContext,
 	forwardTo []gatewayv1.HTTPBackendRef,
 	ns string,
 ) ([]*api.RouteBackend, *gatewaycommon.Condition, *gatewaycommon.Condition) {
@@ -247,7 +247,7 @@ func buildAgwHTTPDestination(
 
 // buildAgwTCPDestination builds RouteBackends for a list of BackendRefs for TCPRoute.
 func buildAgwTCPDestination(
-	ctx RouteContext,
+	ctx gatewaycommon.RouteContext,
 	forwardTo []gatewayv1.BackendRef,
 	ns string,
 ) ([]*api.RouteBackend, *gatewaycommon.Condition, *gatewaycommon.Condition) {
@@ -279,7 +279,7 @@ func buildAgwTCPDestination(
 // buildAgwTLSDestination builds RouteBackends for a list of BackendRefs for TLSRoute.
 // first condition return value is for invalid backends, the second is for other errors
 func buildAgwTLSDestination(
-	ctx RouteContext,
+	ctx gatewaycommon.RouteContext,
 	forwardTo []gatewayv1.BackendRef,
 	ns string,
 ) ([]*api.RouteBackend, *gatewaycommon.Condition, *gatewaycommon.Condition) {

@@ -16,7 +16,9 @@ package gwxds
 
 import (
 	"fmt"
+	"iter"
 
+	"github.com/agentgateway/agentgateway/api"
 	"go.uber.org/atomic"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -26,18 +28,22 @@ import (
 	gateway "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	networkingclient "istio.io/client-go/pkg/apis/networking/v1"
+	"istio.io/istio/pilot/pkg/config/kube/agentgateway"
 	"istio.io/istio/pilot/pkg/config/kube/gatewaycommon"
 	kubesecrets "istio.io/istio/pilot/pkg/credentials/kube"
+	"istio.io/istio/pilot/pkg/features"
 	"istio.io/istio/pilot/pkg/model"
 	kubecontroller "istio.io/istio/pilot/pkg/serviceregistry/kube/controller"
+	"istio.io/istio/pilot/pkg/status"
+	"istio.io/istio/pilot/pkg/util/protoconv"
 	"istio.io/istio/pilot/pkg/xds"
 	"istio.io/istio/pkg/cluster"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/constants"
+	"istio.io/istio/pkg/config/schema/gvk"
 	"istio.io/istio/pkg/config/schema/gvr"
 	gwxdsapi "istio.io/istio/pkg/gwxdsapi"
 	"istio.io/istio/pkg/kube"
-	"istio.io/istio/pilot/pkg/util/protoconv"
 	"istio.io/istio/pkg/kube/kclient"
 	"istio.io/istio/pkg/kube/krt"
 	"istio.io/istio/pkg/kube/kubetypes"
@@ -74,19 +80,19 @@ func (r GwXdsResource) Equals(other GwXdsResource) bool {
 
 // GwXdsInputs holds all informer collections the gwxds controller needs.
 type GwXdsInputs struct {
-	Namespaces        krt.Collection[*corev1.Namespace]
-	Services          krt.Collection[*corev1.Service]
-	Secrets           krt.Collection[*corev1.Secret]
-	ConfigMaps        krt.Collection[*corev1.ConfigMap]
-	GatewayClasses    krt.Collection[*gatewayv1.GatewayClass]
-	Gateways          krt.Collection[*gatewayv1.Gateway]
-	HTTPRoutes        krt.Collection[*gatewayv1.HTTPRoute]
-	GRPCRoutes        krt.Collection[*gatewayv1.GRPCRoute]
-	ListenerSets      krt.Collection[*gatewayv1.ListenerSet]
-	ReferenceGrants   krt.Collection[*gateway.ReferenceGrant]
-	ServiceEntries    krt.Collection[*networkingclient.ServiceEntry]
+	Namespaces         krt.Collection[*corev1.Namespace]
+	Services           krt.Collection[*corev1.Service]
+	Secrets            krt.Collection[*corev1.Secret]
+	ConfigMaps         krt.Collection[*corev1.ConfigMap]
+	GatewayClasses     krt.Collection[*gatewayv1.GatewayClass]
+	Gateways           krt.Collection[*gatewayv1.Gateway]
+	HTTPRoutes         krt.Collection[*gatewayv1.HTTPRoute]
+	GRPCRoutes         krt.Collection[*gatewayv1.GRPCRoute]
+	ListenerSets       krt.Collection[*gatewayv1.ListenerSet]
+	ReferenceGrants    krt.Collection[*gateway.ReferenceGrant]
+	ServiceEntries     krt.Collection[*networkingclient.ServiceEntry]
 	BackendTLSPolicies krt.Collection[*gatewayv1.BackendTLSPolicy]
-	InferencePools    krt.Collection[*inferencev1.InferencePool]
+	InferencePools     krt.Collection[*inferencev1.InferencePool]
 }
 
 // Controller is the gwxds controller. It consumes gatewaycommon collections and
@@ -94,10 +100,17 @@ type GwXdsInputs struct {
 type Controller struct {
 	stop chan struct{}
 
+	// status queues writes to Gateway API object status when the revision holds the status leader lock.
+	status *status.StatusCollections
+
 	gatewayContext krt.RecomputeProtected[*atomic.Pointer[gatewaycommon.GatewayContext]]
 	tagWatcher     krt.RecomputeProtected[revisions.TagWatcher]
 
 	outputs krt.Collection[GwXdsResource]
+
+	// routeStatusOutputs retains discarded route translation outputs so HTTPRoute/GRPCRoute status
+	// collections built via gatewaycommon.RouteStatusManyCollection stay subscribed and synced.
+	routeStatusOutputs krt.Collection[struct{}]
 
 	Registrations []xds.Registration
 
@@ -117,6 +130,7 @@ func NewController(
 	tw := revisions.NewTagWatcher(kc, options.Revision, options.SystemNamespace)
 	c := &Controller{
 		stop:           stop,
+		status:         &status.StatusCollections{},
 		domainSuffix:   options.DomainSuffix,
 		clusterID:      options.ClusterID,
 		tagWatcher:     krt.NewRecomputeProtected(tw, false, opts.WithName("gwxds/tagWatcher")...),
@@ -233,12 +247,15 @@ func fetchClass(ctx krt.HandlerContext, gatewayClasses krt.Collection[gatewaycom
 }
 
 func (c *Controller) buildCollections(inputs *GwXdsInputs, domainSuffix string, opts krt.OptionsBuilder) {
-	_, gatewayClasses := gatewaycommon.GatewayClassesCollection(inputs.GatewayClasses, opts)
+	tw := c.tagWatcher.AccessUnprotected()
+
+	gatewayClassStatus, gatewayClasses := gatewaycommon.GatewayClassesCollection(inputs.GatewayClasses, opts)
+	status.RegisterStatus(c.status, gatewayClassStatus, GetStatus, tw)
 
 	refGrantsCol := gatewaycommon.ReferenceGrantsCollection(inputs.ReferenceGrants, opts)
 	refGrants := gatewaycommon.BuildReferenceGrants(refGrantsCol)
 
-	_, listenerSets := gatewaycommon.ListenerSetCollection(
+	listenerSetStatus, listenerSets := gatewaycommon.ListenerSetCollection(
 		inputs.ListenerSets,
 		inputs.Gateways,
 		gatewayClasses,
@@ -252,8 +269,9 @@ func (c *Controller) buildCollections(inputs *GwXdsInputs, domainSuffix string, 
 		fetchClass,
 		opts,
 	)
+	status.RegisterStatus(c.status, listenerSetStatus, GetStatus, tw)
 
-	_, gateways := gatewaycommon.GatewayCollection(
+	gatewayInitialStatus, gateways := gatewaycommon.GatewayCollection(
 		inputs.Gateways,
 		listenerSets,
 		gatewayClasses,
@@ -278,11 +296,80 @@ func (c *Controller) buildCollections(inputs *GwXdsInputs, domainSuffix string, 
 		Services:       inputs.Services,
 		Namespaces:     inputs.Namespaces,
 		ServiceEntries: inputs.ServiceEntries,
+		InferencePools: inputs.InferencePools,
 	}
+
+	httpRouteStatus, httpRouteDiscard := gatewaycommon.RouteStatusManyCollection(
+		inputs.HTTPRoutes,
+		routeInputs,
+		opts,
+		"gwxds/HTTPRoutes",
+		func(ctx gatewaycommon.RouteContext, obj *gatewayv1.HTTPRoute) (gatewaycommon.RouteContext, iter.Seq2[*api.Route, *gatewaycommon.Condition]) {
+			route := obj.Spec
+			return ctx, func(yield func(*api.Route, *gatewaycommon.Condition) bool) {
+				for n, r := range route.Rules {
+					matches := slices.Reference(r.Matches)
+					if len(matches) == 0 {
+						matches = append(matches, nil)
+					}
+					for idx, m := range matches {
+						if m != nil {
+							r.Matches = []gatewayv1.HTTPRouteMatch{*m}
+						}
+						res, err := agentgateway.ConvertHTTPRouteToAgw(ctx, r, obj, n, idx)
+						if !yield(res, err) {
+							return
+						}
+					}
+				}
+			}
+		},
+		func(*api.Route, gatewaycommon.RouteParentReference) struct{} { return struct{}{} },
+		func(rs gatewayv1.RouteStatus) gatewayv1.HTTPRouteStatus {
+			return gatewayv1.HTTPRouteStatus{RouteStatus: rs}
+		},
+	)
+	status.RegisterStatus(c.status, httpRouteStatus, GetStatus, tw)
+
+	grpcRouteStatus, grpcRouteDiscard := gatewaycommon.RouteStatusManyCollection(
+		inputs.GRPCRoutes,
+		routeInputs,
+		opts,
+		"gwxds/GRPCRoutes",
+		func(ctx gatewaycommon.RouteContext, obj *gatewayv1.GRPCRoute) (gatewaycommon.RouteContext, iter.Seq2[*api.Route, *gatewaycommon.Condition]) {
+			route := obj.Spec
+			return ctx, func(yield func(*api.Route, *gatewaycommon.Condition) bool) {
+				for n, r := range route.Rules {
+					res, err := agentgateway.ConvertGRPCRouteToAgw(ctx, r, obj, n)
+					if !yield(res, err) {
+						return
+					}
+				}
+			}
+		},
+		func(*api.Route, gatewaycommon.RouteParentReference) struct{} { return struct{}{} },
+		func(rs gatewayv1.RouteStatus) gatewayv1.GRPCRouteStatus {
+			return gatewayv1.GRPCRouteStatus{RouteStatus: rs}
+		},
+	)
+	status.RegisterStatus(c.status, grpcRouteStatus, GetStatus, tw)
+
+	routeAttachments := krt.JoinCollection([]krt.Collection[*gatewaycommon.RouteAttachment]{
+		gatewaycommon.GatewayRouteAttachmentCountCollection(routeInputs, inputs.HTTPRoutes, gvk.HTTPRoute, opts),
+		gatewaycommon.GatewayRouteAttachmentCountCollection(routeInputs, inputs.GRPCRoutes, gvk.GRPCRoute, opts),
+	}, opts.WithName("gwxds/RouteAttachments")...)
+
+	c.routeStatusOutputs = krt.JoinCollection([]krt.Collection[struct{}]{
+		httpRouteDiscard,
+		grpcRouteDiscard,
+	}, opts.WithName("gwxds/routeStatusOutputs")...)
+
+	gatewayFinalStatus := c.buildFinalGatewayStatus(gatewayInitialStatus, routeAttachments, opts)
+	status.RegisterStatus(c.status, gatewayFinalStatus, GetStatus, tw)
 
 	// Build BackendTLS resolved policies and index them by backend NamespacedName.
 	ancestorBackends := gatewaycommon.BuildAncestorBackends(inputs.HTTPRoutes, inputs.GRPCRoutes, opts)
-	_, resolvedTLS := gatewaycommon.BackendTLSPolicyCollection(gatewaycommon.BackendTLSPolicyInputs{
+	backendTLSStatus, resolvedTLS := gatewaycommon.BackendTLSPolicyCollection(gatewaycommon.BackendTLSPolicyInputs{
 		BackendTLSPolicies: inputs.BackendTLSPolicies,
 		ConfigMaps:         inputs.ConfigMaps,
 		Secrets:            inputs.Secrets,
@@ -292,6 +379,7 @@ func (c *Controller) buildCollections(inputs *GwXdsInputs, domainSuffix string, 
 		ControllerName:     constants.ManagedGwXdsController,
 		DomainSuffix:       domainSuffix,
 	}, opts)
+	status.RegisterStatus(c.status, backendTLSStatus, GetStatus, tw)
 
 	// Index resolved TLS policies by "namespace/expanded-hostname" for O(1) lookup per backend.
 	tlsByBackend := krt.NewIndex(resolvedTLS, "gwxds-tls-by-backend", func(r gatewaycommon.ResolvedBackendTLS) []string {
@@ -426,6 +514,48 @@ func collectRoutes(
 	return out
 }
 
+// buildFinalGatewayStatus merges per-listener attached route counts into Gateway status.
+func (c *Controller) buildFinalGatewayStatus(
+	gatewayStatuses krt.StatusCollection[*gatewayv1.Gateway, gatewayv1.GatewayStatus],
+	routeAttachments krt.Collection[*gatewaycommon.RouteAttachment],
+	opts krt.OptionsBuilder,
+) krt.StatusCollection[*gatewayv1.Gateway, gatewayv1.GatewayStatus] {
+	routeAttachmentsIndex := krt.NewIndex(routeAttachments, "to", func(o *gatewaycommon.RouteAttachment) []types.NamespacedName {
+		return []types.NamespacedName{o.To}
+	})
+	return krt.NewCollection(
+		gatewayStatuses,
+		func(ctx krt.HandlerContext, ows krt.ObjectWithStatus[*gatewayv1.Gateway, gatewayv1.GatewayStatus],
+		) *krt.ObjectWithStatus[*gatewayv1.Gateway, gatewayv1.GatewayStatus] {
+			attached := routeAttachmentsIndex.Fetch(ctx, config.NamespacedName(ows.Obj))
+			counts := map[string]int32{}
+			for _, r := range attached {
+				counts[r.ListenerName]++
+			}
+			st := ows.Status.DeepCopy()
+			for li, ls := range st.Listeners {
+				ls.AttachedRoutes = counts[string(ls.Name)]
+				st.Listeners[li] = ls
+			}
+			return &krt.ObjectWithStatus[*gatewayv1.Gateway, gatewayv1.GatewayStatus]{
+				Obj:    ows.Obj,
+				Status: *st,
+			}
+		}, opts.WithName("gwxds/GatewayFinalStatus")...)
+}
+
+// SetStatusWrite enables or disables asynchronous status writes when this revision holds the leader lock.
+func (c *Controller) SetStatusWrite(enabled bool, statusManager *status.Manager) {
+	if enabled && features.EnableGatewayAPIStatus && statusManager != nil {
+		q := statusManager.CreateGenericController(func(s status.Manipulator, context any) {
+			s.SetInner(context)
+		})
+		c.status.SetQueue(q)
+	} else {
+		c.status.UnsetQueue()
+	}
+}
+
 // Run starts background processes. Call close(stop) to tear down.
 func (c *Controller) Run(stop <-chan struct{}) {
 	tw := c.tagWatcher.AccessUnprotected()
@@ -443,7 +573,13 @@ func (c *Controller) Run(stop <-chan struct{}) {
 
 // HasSynced reports whether all collections have synced.
 func (c *Controller) HasSynced() bool {
-	return c.outputs != nil
+	if c.outputs == nil {
+		return false
+	}
+	if c.routeStatusOutputs != nil && !c.routeStatusOutputs.HasSynced() {
+		return false
+	}
+	return true
 }
 
 // gwxdsSupportedGVRs enumerates the GVRs watched by this controller.

@@ -28,7 +28,7 @@ import (
 
 // BuildAgwTrafficPolicyFilters builds a list of agentgateway TrafficPolicySpec from a list of k8s gateway api HTTPRoute filters
 func BuildAgwTrafficPolicyFilters(
-	ctx RouteContext,
+	ctx gatewaycommon.RouteContext,
 	ns string,
 	inputFilters []gatewayv1.HTTPRouteFilter,
 ) ([]*api.TrafficPolicySpec, *gatewaycommon.Condition) {
@@ -134,7 +134,7 @@ func BuildAgwTrafficPolicyFilters(
 
 // BuildAgwBackendPolicyFilters builds a list of agentgateway BackendPolicySpec from a list of k8s gateway api HTTPRoute filters
 func BuildAgwBackendPolicyFilters(
-	ctx RouteContext,
+	ctx gatewaycommon.RouteContext,
 	ns string,
 	inputFilters []gatewayv1.HTTPRouteFilter,
 ) ([]*api.BackendPolicySpec, *gatewaycommon.Condition) {

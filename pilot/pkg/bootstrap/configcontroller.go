@@ -198,9 +198,9 @@ func (s *Server) initK8SConfigStore(args *PilotArgs) error {
 		s.environment.GatewayAPIController = gwc
 		s.ConfigStores = append(s.ConfigStores, s.environment.GatewayAPIController)
 
-		// Create the agentgateway controller before the leader election block so it can share the
-		// same status writer activation. Both controllers use separate StatusCollections, so both
-		// need SetStatusWrite called to activate their respective status queues.
+		// Create the agentgateway and gwxds controllers before the leader election block so they can
+		// share the same status writer activation. Each uses its own status.StatusCollections, so
+		// each needs SetStatusWrite when it holds the status leader lock.
 		var agwc *agentgateway.Controller
 		if features.EnableAgentgateway {
 			agwc = agentgateway.NewAgwController(s.kubeClient, s.kubeClient.CrdWatcher().WaitForCRD, args.RegistryOptions.KubeOptions)
@@ -209,13 +209,14 @@ func (s *Server) initK8SConfigStore(args *PilotArgs) error {
 			s.ConfigStores = append(s.ConfigStores, s.environment.AgentgatewayController)
 		}
 
+		var gwxdsCtrl *gwxds.Controller
 		// Create the gwxds controller behind the EnableGwXds feature flag.
 		if features.EnableGwXds {
-			gwxdsController := gwxds.NewController(s.kubeClient, s.kubeClient.CrdWatcher().WaitForCRD, args.RegistryOptions.KubeOptions)
-			s.gwxdsController = gwxdsController
-			s.environment.GwXdsController = gwxdsController
+			gwxdsCtrl = gwxds.NewController(s.kubeClient, s.kubeClient.CrdWatcher().WaitForCRD, args.RegistryOptions.KubeOptions)
+			s.gwxdsController = gwxdsCtrl
+			s.environment.GwXdsController = gwxdsCtrl
 			s.addStartFunc("gwxds controller", func(stop <-chan struct{}) error {
-				gwxdsController.Run(stop)
+				gwxdsCtrl.Run(stop)
 				return nil
 			})
 		}
@@ -244,6 +245,9 @@ func (s *Server) initK8SConfigStore(args *PilotArgs) error {
 					if agwc != nil {
 						agwc.SetStatusWrite(true, s.statusManager)
 					}
+					if gwxdsCtrl != nil {
+						gwxdsCtrl.SetStatusWrite(true, s.statusManager)
+					}
 
 					// Trigger a push so we can recompute status
 					s.XDSServer.ConfigUpdate(&model.PushRequest{
@@ -256,6 +260,9 @@ func (s *Server) initK8SConfigStore(args *PilotArgs) error {
 					gwc.SetStatusWrite(false, nil)
 					if agwc != nil {
 						agwc.SetStatusWrite(false, nil)
+					}
+					if gwxdsCtrl != nil {
+						gwxdsCtrl.SetStatusWrite(false, nil)
 					}
 				}).
 				Run(stop)

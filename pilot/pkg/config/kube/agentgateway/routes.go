@@ -176,7 +176,7 @@ func ApplyRetries(rule *gatewayv1.HTTPRouteRule, route *api.Route) error {
 }
 
 // ConvertHTTPRouteToAgw converts a HTTPRouteRule to an agentgateway HTTPRoute
-func ConvertHTTPRouteToAgw(ctx RouteContext, r gatewayv1.HTTPRouteRule,
+func ConvertHTTPRouteToAgw(ctx gatewaycommon.RouteContext, r gatewayv1.HTTPRouteRule,
 	obj *gatewayv1.HTTPRoute, pos int, matchPos int,
 ) (*api.Route, *gatewaycommon.Condition) {
 	routeRuleKey := strconv.Itoa(pos) + "." + strconv.Itoa(matchPos)
@@ -236,7 +236,7 @@ func ConvertHTTPRouteToAgw(ctx RouteContext, r gatewayv1.HTTPRouteRule,
 }
 
 // ConvertGRPCRouteToAgw converts a GRPCRouteRule to an agentgateway HTTPRoute
-func ConvertGRPCRouteToAgw(ctx RouteContext, r gatewayv1.GRPCRouteRule,
+func ConvertGRPCRouteToAgw(ctx gatewaycommon.RouteContext, r gatewayv1.GRPCRouteRule,
 	obj *gatewayv1.GRPCRoute, pos int,
 ) (*api.Route, *gatewaycommon.Condition) {
 	routeRuleKey := strconv.Itoa(pos)
@@ -305,7 +305,7 @@ func ConvertGRPCRouteToAgw(ctx RouteContext, r gatewayv1.GRPCRouteRule,
 }
 
 // ConvertTCPRouteToAgw converts a TCPRouteRule to an agentgateway TCPRoute
-func ConvertTCPRouteToAgw(ctx RouteContext, r gatewayalpha.TCPRouteRule,
+func ConvertTCPRouteToAgw(ctx gatewaycommon.RouteContext, r gatewayalpha.TCPRouteRule,
 	obj *gatewayalpha.TCPRoute, pos int,
 ) (*api.TCPRoute, *gatewaycommon.Condition) {
 	routeRuleKey := strconv.Itoa(pos)
@@ -329,7 +329,7 @@ func ConvertTCPRouteToAgw(ctx RouteContext, r gatewayalpha.TCPRouteRule,
 }
 
 // ConvertTLSRouteToAgw converts a TLSRouteRule to an agentgateway TCPRoute
-func ConvertTLSRouteToAgw(ctx RouteContext, r gatewayv1.TLSRouteRule,
+func ConvertTLSRouteToAgw(ctx gatewaycommon.RouteContext, r gatewayv1.TLSRouteRule,
 	obj *gatewayv1.TLSRoute, pos int,
 ) (*api.TCPRoute, *gatewaycommon.Condition) {
 	routeRuleKey := strconv.Itoa(pos)

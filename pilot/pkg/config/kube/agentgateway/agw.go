@@ -228,7 +228,7 @@ func CreateAgwRewriteFilter(filter *gatewayv1.HTTPURLRewriteFilter) *api.Traffic
 
 // CreateAgwMirrorFilter creates an agw RequestMirror based on a HTTPRequestMirrorFilter
 func CreateAgwMirrorFilter(
-	ctx RouteContext,
+	ctx gatewaycommon.RouteContext,
 	filter *gatewayv1.HTTPRequestMirrorFilter,
 	ns string,
 	k config.GroupVersionKind,
@@ -269,7 +269,7 @@ func CreateAgwMirrorFilter(
 
 // CreateAgwExternalAuthFilter creates Agw filter from Gateway API ExternalAuth filter
 func CreateAgwExternalAuthFilter(
-	ctx RouteContext,
+	ctx gatewaycommon.RouteContext,
 	filter *gatewayv1.HTTPExternalAuthFilter,
 	ns string,
 	k config.GroupVersionKind,
@@ -435,7 +435,7 @@ func CreateAgwRedirectFilter(filter *gatewayv1.HTTPRequestRedirectFilter) *api.R
 
 // BuildAgwGRPCTrafficPolicies constructs gRPC route filters for agent gateway based on the input filters and route context.
 func BuildAgwGRPCTrafficPolicies(
-	ctx RouteContext,
+	ctx gatewaycommon.RouteContext,
 	ns string,
 	inputFilters []gatewayv1.GRPCRouteFilter,
 ) ([]*api.TrafficPolicySpec, *gatewaycommon.Condition) {
@@ -490,7 +490,7 @@ func BuildAgwGRPCTrafficPolicies(
 
 // BuildAgwGRPCBackendPolicies constructs gRPC route filters for agent gateway based on the input filters and route context.
 func BuildAgwGRPCBackendPolicies(
-	ctx RouteContext,
+	ctx gatewaycommon.RouteContext,
 	ns string,
 	inputFilters []gatewayv1.GRPCRouteFilter,
 ) ([]*api.BackendPolicySpec, *gatewaycommon.Condition) {
@@ -545,7 +545,7 @@ func BuildAgwGRPCBackendPolicies(
 }
 
 func buildAgwGRPCDestination(
-	ctx RouteContext,
+	ctx gatewaycommon.RouteContext,
 	forwardTo []gatewayv1.GRPCBackendRef,
 	ns string,
 ) ([]*api.RouteBackend, *gatewaycommon.Condition, *gatewaycommon.Condition) {

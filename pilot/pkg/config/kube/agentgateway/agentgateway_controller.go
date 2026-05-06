@@ -655,17 +655,15 @@ func (c *Controller) buildAgwResources(
 	// Build routes
 	routeParents := gatewaycommon.BuildRouteParents(filteredGateways)
 
-	routeInputs := RouteContextInputs{
-		RouteContextInputs: gatewaycommon.RouteContextInputs{
-			Grants:         refGrants,
-			RouteParents:   routeParents,
-			ControllerName: constants.ManagedAgentgatewayController,
-			DomainSuffix:   c.domainSuffix,
-			Services:       c.inputs.Services,
-			Namespaces:     c.inputs.Namespaces,
-			ServiceEntries: c.inputs.ServiceEntries,
-		},
-		InferencePools: c.inputs.InferencePools,
+	routeInputs := gatewaycommon.RouteContextInputs{
+		Grants:           refGrants,
+		RouteParents:     routeParents,
+		ControllerName:   constants.ManagedAgentgatewayController,
+		DomainSuffix:     c.domainSuffix,
+		Services:         c.inputs.Services,
+		Namespaces:       c.inputs.Namespaces,
+		ServiceEntries:   c.inputs.ServiceEntries,
+		InferencePools:   c.inputs.InferencePools,
 	}
 
 	agwRoutes, routeAttachments := AgwRouteCollection(
