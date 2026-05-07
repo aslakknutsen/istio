@@ -17,10 +17,12 @@ package gwxds
 import (
 	"iter"
 
+	"k8s.io/apimachinery/pkg/types"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"istio.io/istio/pilot/pkg/config/kube/gatewaycommon"
 	"istio.io/istio/pilot/pkg/status"
+	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/schema/gvk"
 	"istio.io/istio/pkg/kube/krt"
 	"istio.io/istio/pkg/revisions"
@@ -84,4 +86,66 @@ func joinedGatewayRouteAttachments(
 		gatewaycommon.GatewayRouteAttachmentCountCollection(inputs, httpRoutes, gvk.HTTPRoute, opts),
 		gatewaycommon.GatewayRouteAttachmentCountCollection(inputs, grpcRoutes, gvk.GRPCRoute, opts),
 	}, opts.WithName("gwxds/RouteAttachmentCounts")...)
+}
+
+// finalGatewayStatusWithAttachments is the gwxds equivalent of gateway.FinalGatewayStatusCollection,
+// using gatewaycommon.RouteAttachment pointers (value type matches gateway.RouteAttachment).
+func finalGatewayStatusWithAttachments(
+	gatewayStatuses krt.StatusCollection[*gatewayv1.Gateway, gatewayv1.GatewayStatus],
+	routeAttachments krt.Collection[*gatewaycommon.RouteAttachment],
+	opts krt.OptionsBuilder,
+) krt.StatusCollection[*gatewayv1.Gateway, gatewayv1.GatewayStatus] {
+	routeAttachmentsIndex := krt.NewIndex(routeAttachments, "to", func(o *gatewaycommon.RouteAttachment) []types.NamespacedName {
+		return []types.NamespacedName{o.To}
+	})
+	return krt.NewCollection(
+		gatewayStatuses,
+		func(
+			ctx krt.HandlerContext, i krt.ObjectWithStatus[*gatewayv1.Gateway, gatewayv1.GatewayStatus],
+		) *krt.ObjectWithStatus[*gatewayv1.Gateway, gatewayv1.GatewayStatus] {
+			routes := routeAttachmentsIndex.Fetch(ctx, config.NamespacedName(i.Obj))
+			counts := map[string]int32{}
+			for _, r := range routes {
+				counts[r.ListenerName]++
+			}
+			st := i.Status.DeepCopy()
+			for idx, s := range st.Listeners {
+				s.AttachedRoutes = counts[string(s.Name)]
+				st.Listeners[idx] = s
+			}
+			return &krt.ObjectWithStatus[*gatewayv1.Gateway, gatewayv1.GatewayStatus]{
+				Obj:    i.Obj,
+				Status: *st,
+			}
+		}, opts.WithName("gwxds/GatewayFinalStatus")...)
+}
+
+func finalListenerSetStatusWithAttachments(
+	listenerSetStatuses krt.StatusCollection[*gatewayv1.ListenerSet, gatewayv1.ListenerSetStatus],
+	routeAttachments krt.Collection[*gatewaycommon.RouteAttachment],
+	opts krt.OptionsBuilder,
+) krt.StatusCollection[*gatewayv1.ListenerSet, gatewayv1.ListenerSetStatus] {
+	routeAttachmentsIndex := krt.NewIndex(routeAttachments, "to", func(o *gatewaycommon.RouteAttachment) []types.NamespacedName {
+		return []types.NamespacedName{o.To}
+	})
+	return krt.NewCollection(
+		listenerSetStatuses,
+		func(
+			ctx krt.HandlerContext, i krt.ObjectWithStatus[*gatewayv1.ListenerSet, gatewayv1.ListenerSetStatus],
+		) *krt.ObjectWithStatus[*gatewayv1.ListenerSet, gatewayv1.ListenerSetStatus] {
+			routes := routeAttachmentsIndex.Fetch(ctx, config.NamespacedName(i.Obj))
+			counts := map[string]int32{}
+			for _, r := range routes {
+				counts[r.ListenerName]++
+			}
+			st := i.Status.DeepCopy()
+			for idx, s := range st.Listeners {
+				s.AttachedRoutes = counts[string(s.Name)]
+				st.Listeners[idx] = s
+			}
+			return &krt.ObjectWithStatus[*gatewayv1.ListenerSet, gatewayv1.ListenerSetStatus]{
+				Obj:    i.Obj,
+				Status: *st,
+			}
+		}, opts.WithName("gwxds/ListenerSetFinalStatus")...)
 }

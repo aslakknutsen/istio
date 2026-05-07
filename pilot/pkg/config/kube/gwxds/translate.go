@@ -17,6 +17,8 @@ package gwxds
 import (
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -66,6 +68,8 @@ type BackendLookup struct {
 	// TLSByHost returns the resolved BackendTLS policy for a given "namespace/expanded-hostname"
 	// key, or nil. The hostname is the FQDN already expanded with DomainSuffix.
 	TLSByHost func(key string) *gatewaycommon.ResolvedBackendTLS
+	// ServiceByKey returns the Kubernetes Service for "namespace/name", or nil if not found.
+	ServiceByKey func(key string) *corev1.Service
 	// DomainSuffix is used to expand service hostnames.
 	DomainSuffix string
 }
@@ -220,13 +224,61 @@ func resolveBackend(
 		Port:   uint32(*ref.Port),
 		Weight: weightOrOne(ref.Weight),
 	}
-	// Omit DialPort: use backendRef port only (same as agentgateway; ClusterIP VIP + targetPort is wrong).
+	// ClusterIP VIP: connect with service port; kube-proxy DNATs to targetPort.
+	// Headless (ClusterIP None): DNS returns pod IPs — there is no DNAT, so the data plane
+	// must dial the container targetPort (Gateway API conformance HTTPRouteServiceTypes).
+	maybeSetHeadlessDialPort(backend, lookup, backendNS, backendName, *ref.Port)
 	if lookup.TLSByHost != nil {
 		if tls := lookup.TLSByHost(backendNS + "/" + backend.Host); tls != nil {
 			backend.Tls = resolvedTLSToBackendTLS(tls)
 		}
 	}
 	return backend
+}
+
+func maybeSetHeadlessDialPort(
+	backend *gwxdsapi.Backend,
+	lookup BackendLookup,
+	svcNS, svcName string,
+	refPort int32,
+) {
+	if lookup.ServiceByKey == nil {
+		return
+	}
+	svc := lookup.ServiceByKey(svcNS + "/" + svcName)
+	if svc == nil {
+		return
+	}
+	if svc.Spec.ClusterIP != corev1.ClusterIPNone {
+		return
+	}
+	sp := findServicePort(svc, refPort)
+	if sp == nil {
+		return
+	}
+	if num, ok := kubeTargetPortAsUint32(sp.TargetPort); ok {
+		backend.DialPort = num
+	}
+}
+
+func findServicePort(svc *corev1.Service, port int32) *corev1.ServicePort {
+	for i := range svc.Spec.Ports {
+		p := &svc.Spec.Ports[i]
+		if p.Port == port {
+			return p
+		}
+	}
+	return nil
+}
+
+func kubeTargetPortAsUint32(tp intstr.IntOrString) (uint32, bool) {
+	switch tp.Type {
+	case intstr.Int:
+		return uint32(tp.IntValue()), true //nolint:gosec
+	default:
+		// Named container ports require pod specs; leave DialPort unset.
+		return 0, false
+	}
 }
 
 // resolveInferencePoolBackend builds a proto Backend for an InferencePool backend ref.
