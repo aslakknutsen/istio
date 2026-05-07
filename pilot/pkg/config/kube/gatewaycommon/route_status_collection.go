@@ -29,7 +29,7 @@ import (
 )
 
 // RouteStatusManyCollection builds desired Route status from Gateway API route objects and optional
-// translated outputs per parent reference. Shared by agentgateway and gwxds.
+// translated outputs per parent reference. Shared by reconcilers that emit route parent status.
 func RouteStatusManyCollection[T controllers.Object, R comparable, O any, ST any](
 	routeCol krt.Collection[T],
 	inputs RouteContextInputs,

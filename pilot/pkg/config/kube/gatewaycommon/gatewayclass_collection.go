@@ -51,13 +51,12 @@ func GatewayClassesCollection(
 }
 
 func FetchGatewayClass(ctx krt.HandlerContext, gatewayClasses krt.Collection[GatewayClass], gc gatewayv1.ObjectName) *GatewayClass {
-	if _, f := AgentgatewayClasses[gc]; f {
-		// This function is only for fetching the gateway classes managed by the gateway controller, if the name matches the agentgateway
-		// class we should return nil immediately
+	if _, f := WorkloadGatewayClasses[gc]; f {
+		// Classes owned by the workload proxy reconciler are not fetched here (handled by that reconciler's ClassFetcher).
 		return nil
 	}
 	if _, f := GwXdsClasses[gc]; f {
-		// Similarly, gwxds classes are managed by the gwxds controller, not this one.
+		// gwxds classes are handled by the gwxds controller's ClassFetcher, not the mesh ingress controller.
 		return nil
 	}
 	class := krt.FetchOne(ctx, gatewayClasses, krt.FilterKey(string(gc)))
@@ -74,4 +73,3 @@ func FetchGatewayClass(ctx krt.HandlerContext, gatewayClasses krt.Collection[Gat
 	}
 	return class
 }
-

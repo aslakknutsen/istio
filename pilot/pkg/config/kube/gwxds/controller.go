@@ -56,6 +56,16 @@ import (
 
 var gwxdsLog = log.RegisterScope("gwxds", "gwxds controller")
 
+// discardedIntermediateRouteKey builds a stable krt key for intermediate route translations we discard.
+// krt requires keyed collection elements (struct{} panics).
+func discardedIntermediateRouteKey(r *api.Route, p gatewaycommon.RouteParentReference) string {
+	rk := ""
+	if r != nil {
+		rk = r.GetKey()
+	}
+	return rk + "|" + p.InternalName + "|" + string(p.ParentSection)
+}
+
 // GwXdsResource is the top-level resource served to a gwxds-capable proxy.
 // It wraps gwxdsapi.Resource and implements xds.IntoProto so the krtxds
 // machinery can distribute it as a typed proto Any.
@@ -110,7 +120,8 @@ type Controller struct {
 
 	// routeStatusOutputs retains discarded route translation outputs so HTTPRoute/GRPCRoute status
 	// collections built via gatewaycommon.RouteStatusManyCollection stay subscribed and synced.
-	routeStatusOutputs krt.Collection[struct{}]
+	// Values are arbitrary unique strings (krt requires keyed collection elements; struct{} panics).
+	routeStatusOutputs krt.Collection[string]
 
 	Registrations []xds.Registration
 
@@ -324,7 +335,7 @@ func (c *Controller) buildCollections(inputs *GwXdsInputs, domainSuffix string, 
 				}
 			}
 		},
-		func(*api.Route, gatewaycommon.RouteParentReference) struct{} { return struct{}{} },
+		discardedIntermediateRouteKey,
 		func(rs gatewayv1.RouteStatus) gatewayv1.HTTPRouteStatus {
 			return gatewayv1.HTTPRouteStatus{RouteStatus: rs}
 		},
@@ -347,7 +358,7 @@ func (c *Controller) buildCollections(inputs *GwXdsInputs, domainSuffix string, 
 				}
 			}
 		},
-		func(*api.Route, gatewaycommon.RouteParentReference) struct{} { return struct{}{} },
+		discardedIntermediateRouteKey,
 		func(rs gatewayv1.RouteStatus) gatewayv1.GRPCRouteStatus {
 			return gatewayv1.GRPCRouteStatus{RouteStatus: rs}
 		},
@@ -359,7 +370,7 @@ func (c *Controller) buildCollections(inputs *GwXdsInputs, domainSuffix string, 
 		gatewaycommon.GatewayRouteAttachmentCountCollection(routeInputs, inputs.GRPCRoutes, gvk.GRPCRoute, opts),
 	}, opts.WithName("gwxds/RouteAttachments")...)
 
-	c.routeStatusOutputs = krt.JoinCollection([]krt.Collection[struct{}]{
+	c.routeStatusOutputs = krt.JoinCollection([]krt.Collection[string]{
 		httpRouteDiscard,
 		grpcRouteDiscard,
 	}, opts.WithName("gwxds/routeStatusOutputs")...)

@@ -56,7 +56,7 @@ type ClassControllerOptions struct {
 func NewAgentgatewayClassController(kc kube.Client, opts ClassControllerOptions) *ClassController {
 	builtinClasses := opts.BuiltinClasses
 	if builtinClasses == nil {
-		builtinClasses = gatewaycommon.AgentgatewayClasses
+		builtinClasses = gatewaycommon.WorkloadGatewayClasses
 	}
 	classInfos := opts.ClassInfos
 	if classInfos == nil {

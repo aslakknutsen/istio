@@ -43,7 +43,7 @@ func InferencePoolCollection(
 		httpRoutes,
 		gateways,
 		routesByInferencePool,
-		gatewaycommon.AgentgatewayClasses,
+		gatewaycommon.WorkloadGatewayClasses,
 		opts,
 	)
 }

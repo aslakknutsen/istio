@@ -55,13 +55,14 @@ var ClassInfos = GetClassInfos()
 // BuiltinGatewayClasses contains the built-in gateway classes.
 var BuiltinGatewayClasses = GetBuiltinGatewayClasses()
 
-// AgentgatewayClasses contains the built-in agentgateway classes.
-var AgentgatewayClasses = GetAgentGatewayClasses()
+// WorkloadGatewayClasses maps GatewayClass names to the workload-proxy GatewayController
+// when the workload proxy feature is enabled.
+var WorkloadGatewayClasses = GetWorkloadGatewayClasses()
 
 // GwXdsClasses contains the gwxds gateway classes.
 var GwXdsClasses = GetGwXdsClasses()
 
-// AllClasses contains all classes, including built-in and agentgateway.
+// AllClasses contains all classes, including built-in, workload proxy, and gwxds when enabled.
 var AllClasses = GetAllClasses()
 
 // GetBuiltinGatewayClasses returns the built-in gateway class mappings.
@@ -86,8 +87,8 @@ func GetBuiltinGatewayClasses() map[gateway.ObjectName]gateway.GatewayController
 	return res
 }
 
-// GetAgentGatewayClasses returns the agentgateway class mapping.
-func GetAgentGatewayClasses() map[gateway.ObjectName]gateway.GatewayController {
+// GetWorkloadGatewayClasses returns GatewayClass names for the workload proxy reconciler.
+func GetWorkloadGatewayClasses() map[gateway.ObjectName]gateway.GatewayController {
 	res := map[gateway.ObjectName]gateway.GatewayController{}
 	if features.EnableAgentgateway {
 		res[constants.AgentgatewayClassName] = constants.ManagedAgentgatewayController
@@ -104,10 +105,10 @@ func GetGwXdsClasses() map[gateway.ObjectName]gateway.GatewayController {
 	return res
 }
 
-// GetAllClasses returns the mapping of all classes, including built-in and agentgateway.
+// GetAllClasses returns the mapping of all classes, including built-in and optional extensions.
 func GetAllClasses() map[gateway.ObjectName]gateway.GatewayController {
 	res := GetBuiltinGatewayClasses()
-	for k, v := range GetAgentGatewayClasses() {
+	for k, v := range GetWorkloadGatewayClasses() {
 		res[k] = v
 	}
 	for k, v := range GetGwXdsClasses() {
@@ -158,7 +159,7 @@ func GetClassInfos() map[gateway.GatewayController]ClassInfo {
 	if features.EnableAgentgateway {
 		m[constants.ManagedAgentgatewayController] = ClassInfo{
 			Controller:          constants.ManagedAgentgatewayController,
-			Description:         "Istio with Agentgateway",
+			Description:         "Workload proxy GatewayClass",
 			Templates:           "agentgateway",
 			DisableNameSuffix:   true,
 			DefaultServiceType:  corev1.ServiceTypeLoadBalancer,

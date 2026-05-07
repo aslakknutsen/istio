@@ -340,7 +340,7 @@ func (d *DeploymentController) Reconcile(req types.NamespacedName) error {
 		if f {
 			controller = builtin
 		} else if features.EnableAgentgateway {
-			if agwClass, f := AgentgatewayClasses[gw.Spec.GatewayClassName]; f {
+			if agwClass, f := WorkloadGatewayClasses[gw.Spec.GatewayClassName]; f {
 				controller = agwClass
 			}
 		}

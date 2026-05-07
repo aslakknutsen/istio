@@ -33,8 +33,8 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayalpha "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	istio "istio.io/api/networking/v1alpha3"
 	"istio.io/api/annotation"
+	istio "istio.io/api/networking/v1alpha3"
 	kubecreds "istio.io/istio/pilot/pkg/credentials/kube"
 	"istio.io/istio/pilot/pkg/features"
 	"istio.io/istio/pilot/pkg/model"
@@ -169,9 +169,7 @@ func BuildRouteParents(gateways krt.Collection[*GatewayListener]) RouteParents {
 
 // ListenerSetCollection builds the collection of ListenerSets.
 //
-// fetchClass determines which GatewayClass objects are owned by the calling
-// controller. Pass FetchAgentgatewayClass for the agentgateway controller and
-// FetchGwXdsClass for the gwxds controller.
+// fetchClass selects GatewayClasses owned by the calling reconciler (each passes its own ClassFetcher).
 func ListenerSetCollection(
 	listenerSets krt.Collection[*gatewayv1.ListenerSet],
 	gateways krt.Collection[*gatewayv1.Gateway],
@@ -298,9 +296,7 @@ type ClassFetcher func(ctx krt.HandlerContext, gatewayClasses krt.Collection[Gat
 // GatewayCollection builds the collection of GatewayListeners. It translates from the Kubernetes
 // Gateway API types to the neutral GatewayListener IR and computes Gateway status.
 //
-// fetchClass determines which GatewayClass objects are owned by the calling
-// controller. Pass FetchAgentgatewayClass for the agentgateway controller and
-// FetchGwXdsClass for the gwxds controller.
+// fetchClass selects GatewayClasses owned by the calling reconciler (each passes its own ClassFetcher).
 func GatewayCollection(
 	gateways krt.Collection[*gatewayv1.Gateway],
 	listenerSets krt.Collection[ListenerSet],

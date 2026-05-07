@@ -247,10 +247,10 @@ func (c *Controller) initializeInputs(kc kube.Client, opts krt.OptionsBuilder) {
 }
 
 // fetchClass resolves a GatewayClass owned by the agentgateway controller.
-// It returns nil for any class not in gatewaycommon.AgentgatewayClasses so that
+// It returns nil for any class not in gatewaycommon.WorkloadGatewayClasses so that
 // unrelated Gateway objects are silently ignored.
 func fetchClass(ctx krt.HandlerContext, gatewayClasses krt.Collection[gatewaycommon.GatewayClass], gc gatewayv1.ObjectName) *gatewaycommon.GatewayClass {
-	bc, f := gatewaycommon.AgentgatewayClasses[gc]
+	bc, f := gatewaycommon.WorkloadGatewayClasses[gc]
 	if !f {
 		return nil
 	}
@@ -608,7 +608,7 @@ func (c *Controller) buildAgwResources(
 	// (resources for additional gateway classes should be created by the downstream providing them)
 	filteredGateways := krt.NewCollection(gateways, func(ctx krt.HandlerContext, gw *gatewaycommon.GatewayListener) **gatewaycommon.GatewayListener {
 		// Note: This filtering logic is opposite of kgateway which uses additionalGatewayClasses
-		if _, builtInClass := gatewaycommon.AgentgatewayClasses[gatewayv1.ObjectName(gw.ParentInfo.ParentGatewayClassName)]; !builtInClass {
+		if _, builtInClass := gatewaycommon.WorkloadGatewayClasses[gatewayv1.ObjectName(gw.ParentInfo.ParentGatewayClassName)]; !builtInClass {
 			return nil
 		}
 		return &gw
@@ -656,14 +656,14 @@ func (c *Controller) buildAgwResources(
 	routeParents := gatewaycommon.BuildRouteParents(filteredGateways)
 
 	routeInputs := gatewaycommon.RouteContextInputs{
-		Grants:           refGrants,
-		RouteParents:     routeParents,
-		ControllerName:   constants.ManagedAgentgatewayController,
-		DomainSuffix:     c.domainSuffix,
-		Services:         c.inputs.Services,
-		Namespaces:       c.inputs.Namespaces,
-		ServiceEntries:   c.inputs.ServiceEntries,
-		InferencePools:   c.inputs.InferencePools,
+		Grants:         refGrants,
+		RouteParents:   routeParents,
+		ControllerName: constants.ManagedAgentgatewayController,
+		DomainSuffix:   c.domainSuffix,
+		Services:       c.inputs.Services,
+		Namespaces:     c.inputs.Namespaces,
+		ServiceEntries: c.inputs.ServiceEntries,
+		InferencePools: c.inputs.InferencePools,
 	}
 
 	agwRoutes, routeAttachments := AgwRouteCollection(

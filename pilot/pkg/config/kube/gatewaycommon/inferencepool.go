@@ -44,7 +44,7 @@ func (i InferencePool) ResourceName() string {
 // InferencePoolCollection builds KRT collections for InferencePool status tracking.
 //
 // managedClasses is the map of GatewayClass name → GatewayController for the calling
-// proxy (e.g. agentgateway classes or gwxds classes). It is used both for:
+// reconciler (workload proxy classes and/or gwxds when applicable). It is used both for:
 //   - checking whether an HTTPRoute's parent status is owned by us (via controller name)
 //   - deciding whether an existing Gateway is managed by us (via class name)
 func InferencePoolCollection(
