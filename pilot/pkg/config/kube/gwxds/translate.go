@@ -105,6 +105,45 @@ func HTTPRouteRuleToGwRoute(
 		}
 	}
 
+	for _, f := range rule.Filters {
+		if f.Type == gatewayv1.HTTPRouteFilterRequestRedirect && f.RequestRedirect != nil {
+			out.RequestRedirect = httpRequestRedirectToProto(f.RequestRedirect)
+			break
+		}
+	}
+
+	return out
+}
+
+func httpRequestRedirectToProto(r *gatewayv1.HTTPRequestRedirectFilter) *gwxdsapi.RequestRedirect {
+	if r == nil {
+		return nil
+	}
+	out := &gwxdsapi.RequestRedirect{}
+	if r.Scheme != nil {
+		out.Scheme = *r.Scheme
+	}
+	if r.Hostname != nil {
+		out.Hostname = string(*r.Hostname)
+	}
+	if r.Port != nil {
+		out.Port = uint32(*r.Port)
+	}
+	if r.StatusCode != nil {
+		out.StatusCode = uint32(*r.StatusCode)
+	}
+	if r.Path != nil {
+		switch r.Path.Type {
+		case gatewayv1.FullPathHTTPPathModifier:
+			if r.Path.ReplaceFullPath != nil {
+				out.Path = *r.Path.ReplaceFullPath
+			}
+		case gatewayv1.PrefixMatchHTTPPathModifier:
+			if r.Path.ReplacePrefixMatch != nil {
+				out.Path = *r.Path.ReplacePrefixMatch
+			}
+		}
+	}
 	return out
 }
 

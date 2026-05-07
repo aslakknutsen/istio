@@ -601,6 +601,83 @@ func (x *Backend) GetTls() *BackendTLS {
 	return nil
 }
 
+// RequestRedirect mirrors Gateway API HTTPRequestRedirect for redirect-only rules.
+type RequestRedirect struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Hostname      string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Port          uint32                 `protobuf:"varint,3,opt,name=port,proto3" json:"port,omitempty"`
+	Scheme        string                 `protobuf:"bytes,4,opt,name=scheme,proto3" json:"scheme,omitempty"`
+	StatusCode    uint32                 `protobuf:"varint,5,opt,name=status_code,json=statusCode,proto3" json:"status_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestRedirect) Reset() {
+	*x = RequestRedirect{}
+	mi := &file_gwxdsapi_gwxds_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestRedirect) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestRedirect) ProtoMessage() {}
+
+func (x *RequestRedirect) ProtoReflect() protoreflect.Message {
+	mi := &file_gwxdsapi_gwxds_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestRedirect.ProtoReflect.Descriptor instead.
+func (*RequestRedirect) Descriptor() ([]byte, []int) {
+	return file_gwxdsapi_gwxds_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RequestRedirect) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *RequestRedirect) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *RequestRedirect) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *RequestRedirect) GetScheme() string {
+	if x != nil {
+		return x.Scheme
+	}
+	return ""
+}
+
+func (x *RequestRedirect) GetStatusCode() uint32 {
+	if x != nil {
+		return x.StatusCode
+	}
+	return 0
+}
+
 // RouteMatch describes matching criteria for a single route rule.
 type RouteMatch struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -620,7 +697,7 @@ type RouteMatch struct {
 
 func (x *RouteMatch) Reset() {
 	*x = RouteMatch{}
-	mi := &file_gwxdsapi_gwxds_proto_msgTypes[6]
+	mi := &file_gwxdsapi_gwxds_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -632,7 +709,7 @@ func (x *RouteMatch) String() string {
 func (*RouteMatch) ProtoMessage() {}
 
 func (x *RouteMatch) ProtoReflect() protoreflect.Message {
-	mi := &file_gwxdsapi_gwxds_proto_msgTypes[6]
+	mi := &file_gwxdsapi_gwxds_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -645,7 +722,7 @@ func (x *RouteMatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RouteMatch.ProtoReflect.Descriptor instead.
 func (*RouteMatch) Descriptor() ([]byte, []int) {
-	return file_gwxdsapi_gwxds_proto_rawDescGZIP(), []int{6}
+	return file_gwxdsapi_gwxds_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RouteMatch) GetPathPrefix() string {
@@ -695,14 +772,16 @@ type Route struct {
 	// Matching criteria. Empty means match all requests.
 	Matches []*RouteMatch `protobuf:"bytes,4,rep,name=matches,proto3" json:"matches,omitempty"`
 	// Upstream targets for matched requests.
-	Backends      []*Backend `protobuf:"bytes,5,rep,name=backends,proto3" json:"backends,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Backends []*Backend `protobuf:"bytes,5,rep,name=backends,proto3" json:"backends,omitempty"`
+	// When set, matched requests are redirected (Gateway RequestRedirect filter).
+	RequestRedirect *RequestRedirect `protobuf:"bytes,6,opt,name=request_redirect,json=requestRedirect,proto3" json:"request_redirect,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Route) Reset() {
 	*x = Route{}
-	mi := &file_gwxdsapi_gwxds_proto_msgTypes[7]
+	mi := &file_gwxdsapi_gwxds_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -714,7 +793,7 @@ func (x *Route) String() string {
 func (*Route) ProtoMessage() {}
 
 func (x *Route) ProtoReflect() protoreflect.Message {
-	mi := &file_gwxdsapi_gwxds_proto_msgTypes[7]
+	mi := &file_gwxdsapi_gwxds_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -727,7 +806,7 @@ func (x *Route) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Route.ProtoReflect.Descriptor instead.
 func (*Route) Descriptor() ([]byte, []int) {
-	return file_gwxdsapi_gwxds_proto_rawDescGZIP(), []int{7}
+	return file_gwxdsapi_gwxds_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Route) GetKey() string {
@@ -765,6 +844,13 @@ func (x *Route) GetBackends() []*Backend {
 	return nil
 }
 
+func (x *Route) GetRequestRedirect() *RequestRedirect {
+	if x != nil {
+		return x.RequestRedirect
+	}
+	return nil
+}
+
 // Resource is the top-level xDS resource served to a gwxds-capable proxy.
 // It bundles a resolved listener with all its attached routes.
 type Resource struct {
@@ -779,7 +865,7 @@ type Resource struct {
 
 func (x *Resource) Reset() {
 	*x = Resource{}
-	mi := &file_gwxdsapi_gwxds_proto_msgTypes[8]
+	mi := &file_gwxdsapi_gwxds_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +877,7 @@ func (x *Resource) String() string {
 func (*Resource) ProtoMessage() {}
 
 func (x *Resource) ProtoReflect() protoreflect.Message {
-	mi := &file_gwxdsapi_gwxds_proto_msgTypes[8]
+	mi := &file_gwxdsapi_gwxds_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +890,7 @@ func (x *Resource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Resource.ProtoReflect.Descriptor instead.
 func (*Resource) Descriptor() ([]byte, []int) {
-	return file_gwxdsapi_gwxds_proto_rawDescGZIP(), []int{8}
+	return file_gwxdsapi_gwxds_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Resource) GetKey() string {
@@ -868,7 +954,14 @@ const file_gwxdsapi_gwxds_proto_rawDesc = "" +
 	"\x04port\x18\x02 \x01(\rR\x04port\x12\x16\n" +
 	"\x06weight\x18\x03 \x01(\rR\x06weight\x12A\n" +
 	"\x0einference_pool\x18\x04 \x01(\v2\x1a.istio.gwxds.InferencePoolR\rinferencePool\x12)\n" +
-	"\x03tls\x18\x05 \x01(\v2\x17.istio.gwxds.BackendTLSR\x03tls\"\x81\x02\n" +
+	"\x03tls\x18\x05 \x01(\v2\x17.istio.gwxds.BackendTLSR\x03tls\"\x8e\x01\n" +
+	"\x0fRequestRedirect\x12\x1a\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
+	"\x04port\x18\x03 \x01(\rR\x04port\x12\x16\n" +
+	"\x06scheme\x18\x04 \x01(\tR\x06scheme\x12\x1f\n" +
+	"\vstatus_code\x18\x05 \x01(\rR\n" +
+	"statusCode\"\x81\x02\n" +
 	"\n" +
 	"RouteMatch\x12\x1f\n" +
 	"\vpath_prefix\x18\x01 \x01(\tR\n" +
@@ -881,13 +974,14 @@ const file_gwxdsapi_gwxds_proto_rawDesc = "" +
 	"\amethods\x18\x05 \x03(\tR\amethods\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbf\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x88\x02\n" +
 	"\x05Route\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12!\n" +
 	"\flistener_key\x18\x02 \x01(\tR\vlistenerKey\x12\x1c\n" +
 	"\thostnames\x18\x03 \x03(\tR\thostnames\x121\n" +
 	"\amatches\x18\x04 \x03(\v2\x17.istio.gwxds.RouteMatchR\amatches\x120\n" +
-	"\bbackends\x18\x05 \x03(\v2\x14.istio.gwxds.BackendR\bbackends\"{\n" +
+	"\bbackends\x18\x05 \x03(\v2\x14.istio.gwxds.BackendR\bbackends\x12G\n" +
+	"\x10request_redirect\x18\x06 \x01(\v2\x1c.istio.gwxds.RequestRedirectR\x0frequestRedirect\"{\n" +
 	"\bResource\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x121\n" +
 	"\blistener\x18\x02 \x01(\v2\x15.istio.gwxds.ListenerR\blistener\x12*\n" +
@@ -915,20 +1009,21 @@ func file_gwxdsapi_gwxds_proto_rawDescGZIP() []byte {
 }
 
 var file_gwxdsapi_gwxds_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_gwxdsapi_gwxds_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_gwxdsapi_gwxds_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_gwxdsapi_gwxds_proto_goTypes = []any{
-	(Protocol)(0),         // 0: istio.gwxds.Protocol
-	(FailureMode)(0),      // 1: istio.gwxds.FailureMode
-	(*TLSConfig)(nil),     // 2: istio.gwxds.TLSConfig
-	(*Listener)(nil),      // 3: istio.gwxds.Listener
-	(*BackendRef)(nil),    // 4: istio.gwxds.BackendRef
-	(*InferencePool)(nil), // 5: istio.gwxds.InferencePool
-	(*BackendTLS)(nil),    // 6: istio.gwxds.BackendTLS
-	(*Backend)(nil),       // 7: istio.gwxds.Backend
-	(*RouteMatch)(nil),    // 8: istio.gwxds.RouteMatch
-	(*Route)(nil),         // 9: istio.gwxds.Route
-	(*Resource)(nil),      // 10: istio.gwxds.Resource
-	nil,                   // 11: istio.gwxds.RouteMatch.HeadersEntry
+	(Protocol)(0),           // 0: istio.gwxds.Protocol
+	(FailureMode)(0),        // 1: istio.gwxds.FailureMode
+	(*TLSConfig)(nil),       // 2: istio.gwxds.TLSConfig
+	(*Listener)(nil),        // 3: istio.gwxds.Listener
+	(*BackendRef)(nil),      // 4: istio.gwxds.BackendRef
+	(*InferencePool)(nil),   // 5: istio.gwxds.InferencePool
+	(*BackendTLS)(nil),      // 6: istio.gwxds.BackendTLS
+	(*Backend)(nil),         // 7: istio.gwxds.Backend
+	(*RequestRedirect)(nil), // 8: istio.gwxds.RequestRedirect
+	(*RouteMatch)(nil),      // 9: istio.gwxds.RouteMatch
+	(*Route)(nil),           // 10: istio.gwxds.Route
+	(*Resource)(nil),        // 11: istio.gwxds.Resource
+	nil,                     // 12: istio.gwxds.RouteMatch.HeadersEntry
 }
 var file_gwxdsapi_gwxds_proto_depIdxs = []int32{
 	0,  // 0: istio.gwxds.Listener.protocol:type_name -> istio.gwxds.Protocol
@@ -937,16 +1032,17 @@ var file_gwxdsapi_gwxds_proto_depIdxs = []int32{
 	1,  // 3: istio.gwxds.InferencePool.failure_mode:type_name -> istio.gwxds.FailureMode
 	5,  // 4: istio.gwxds.Backend.inference_pool:type_name -> istio.gwxds.InferencePool
 	6,  // 5: istio.gwxds.Backend.tls:type_name -> istio.gwxds.BackendTLS
-	11, // 6: istio.gwxds.RouteMatch.headers:type_name -> istio.gwxds.RouteMatch.HeadersEntry
-	8,  // 7: istio.gwxds.Route.matches:type_name -> istio.gwxds.RouteMatch
+	12, // 6: istio.gwxds.RouteMatch.headers:type_name -> istio.gwxds.RouteMatch.HeadersEntry
+	9,  // 7: istio.gwxds.Route.matches:type_name -> istio.gwxds.RouteMatch
 	7,  // 8: istio.gwxds.Route.backends:type_name -> istio.gwxds.Backend
-	3,  // 9: istio.gwxds.Resource.listener:type_name -> istio.gwxds.Listener
-	9,  // 10: istio.gwxds.Resource.routes:type_name -> istio.gwxds.Route
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	8,  // 9: istio.gwxds.Route.request_redirect:type_name -> istio.gwxds.RequestRedirect
+	3,  // 10: istio.gwxds.Resource.listener:type_name -> istio.gwxds.Listener
+	10, // 11: istio.gwxds.Resource.routes:type_name -> istio.gwxds.Route
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_gwxdsapi_gwxds_proto_init() }
@@ -960,7 +1056,7 @@ func file_gwxdsapi_gwxds_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gwxdsapi_gwxds_proto_rawDesc), len(file_gwxdsapi_gwxds_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

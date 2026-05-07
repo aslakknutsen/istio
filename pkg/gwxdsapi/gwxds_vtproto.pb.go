@@ -203,6 +203,37 @@ func (this *Backend) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+func (this *RequestRedirect) EqualVT(that *RequestRedirect) bool {
+	if this == that {
+		return true
+	} else if this == nil || that == nil {
+		return false
+	}
+	if this.Hostname != that.Hostname {
+		return false
+	}
+	if this.Path != that.Path {
+		return false
+	}
+	if this.Port != that.Port {
+		return false
+	}
+	if this.Scheme != that.Scheme {
+		return false
+	}
+	if this.StatusCode != that.StatusCode {
+		return false
+	}
+	return string(this.unknownFields) == string(that.unknownFields)
+}
+
+func (this *RequestRedirect) EqualMessageVT(thatMsg proto.Message) bool {
+	that, ok := thatMsg.(*RequestRedirect)
+	if !ok {
+		return false
+	}
+	return this.EqualVT(that)
+}
 func (this *RouteMatch) EqualVT(that *RouteMatch) bool {
 	if this == that {
 		return true
@@ -303,6 +334,9 @@ func (this *Route) EqualVT(that *Route) bool {
 				return false
 			}
 		}
+	}
+	if !this.RequestRedirect.EqualVT(that.RequestRedirect) {
+		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
 }
@@ -733,6 +767,70 @@ func (m *Backend) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *RequestRedirect) MarshalVTStrict() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVTStrict(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RequestRedirect) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *RequestRedirect) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if m.StatusCode != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.StatusCode))
+		i--
+		dAtA[i] = 0x28
+	}
+	if len(m.Scheme) > 0 {
+		i -= len(m.Scheme)
+		copy(dAtA[i:], m.Scheme)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Scheme)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.Port != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.Port))
+		i--
+		dAtA[i] = 0x18
+	}
+	if len(m.Path) > 0 {
+		i -= len(m.Path)
+		copy(dAtA[i:], m.Path)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Path)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Hostname) > 0 {
+		i -= len(m.Hostname)
+		copy(dAtA[i:], m.Hostname)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Hostname)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *RouteMatch) MarshalVTStrict() (dAtA []byte, err error) {
 	if m == nil {
 		return nil, nil
@@ -844,6 +942,16 @@ func (m *Route) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if m.RequestRedirect != nil {
+		size, err := m.RequestRedirect.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x32
 	}
 	if len(m.Backends) > 0 {
 		for iNdEx := len(m.Backends) - 1; iNdEx >= 0; iNdEx-- {
@@ -1114,6 +1222,34 @@ func (m *Backend) SizeVT() (n int) {
 	return n
 }
 
+func (m *RequestRedirect) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Hostname)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	l = len(m.Path)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	if m.Port != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.Port))
+	}
+	l = len(m.Scheme)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	if m.StatusCode != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.StatusCode))
+	}
+	n += len(m.unknownFields)
+	return n
+}
+
 func (m *RouteMatch) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -1181,6 +1317,10 @@ func (m *Route) SizeVT() (n int) {
 			l = e.SizeVT()
 			n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 		}
+	}
+	if m.RequestRedirect != nil {
+		l = m.RequestRedirect.SizeVT()
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	n += len(m.unknownFields)
 	return n
