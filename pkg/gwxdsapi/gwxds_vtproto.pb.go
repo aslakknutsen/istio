@@ -422,6 +422,9 @@ func (this *Route) EqualVT(that *Route) bool {
 	if !this.RequestHeaderModifier.EqualVT(that.RequestHeaderModifier) {
 		return false
 	}
+	if this.InvalidBackendRef != that.InvalidBackendRef {
+		return false
+	}
 	return string(this.unknownFields) == string(that.unknownFields)
 }
 
@@ -1140,6 +1143,16 @@ func (m *Route) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.InvalidBackendRef {
+		i--
+		if m.InvalidBackendRef {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x40
+	}
 	if m.RequestHeaderModifier != nil {
 		size, err := m.RequestHeaderModifier.MarshalToSizedBufferVTStrict(dAtA[:i])
 		if err != nil {
@@ -1578,6 +1591,9 @@ func (m *Route) SizeVT() (n int) {
 	if m.RequestHeaderModifier != nil {
 		l = m.RequestHeaderModifier.SizeVT()
 		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	if m.InvalidBackendRef {
+		n += 2
 	}
 	n += len(m.unknownFields)
 	return n

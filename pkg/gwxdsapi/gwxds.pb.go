@@ -891,8 +891,10 @@ type Route struct {
 	RequestRedirect *RequestRedirect `protobuf:"bytes,6,opt,name=request_redirect,json=requestRedirect,proto3" json:"request_redirect,omitempty"`
 	// Per-route request header changes (Gateway RequestHeaderModifier). Applied after match.
 	RequestHeaderModifier *RequestHeaderModifier `protobuf:"bytes,7,opt,name=request_header_modifier,json=requestHeaderModifier,proto3" json:"request_header_modifier,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// When true, the rule matched but backend refs did not resolve — respond with HTTP 500.
+	InvalidBackendRef bool `protobuf:"varint,8,opt,name=invalid_backend_ref,json=invalidBackendRef,proto3" json:"invalid_backend_ref,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Route) Reset() {
@@ -972,6 +974,13 @@ func (x *Route) GetRequestHeaderModifier() *RequestHeaderModifier {
 		return x.RequestHeaderModifier
 	}
 	return nil
+}
+
+func (x *Route) GetInvalidBackendRef() bool {
+	if x != nil {
+		return x.InvalidBackendRef
+	}
+	return false
 }
 
 // Resource is the top-level xDS resource served to a gwxds-capable proxy.
@@ -1104,7 +1113,7 @@ const file_gwxdsapi_gwxds_proto_rawDesc = "" +
 	"\amethods\x18\x05 \x03(\tR\amethods\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe4\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x94\x03\n" +
 	"\x05Route\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12!\n" +
 	"\flistener_key\x18\x02 \x01(\tR\vlistenerKey\x12\x1c\n" +
@@ -1112,7 +1121,8 @@ const file_gwxdsapi_gwxds_proto_rawDesc = "" +
 	"\amatches\x18\x04 \x03(\v2\x17.istio.gwxds.RouteMatchR\amatches\x120\n" +
 	"\bbackends\x18\x05 \x03(\v2\x14.istio.gwxds.BackendR\bbackends\x12G\n" +
 	"\x10request_redirect\x18\x06 \x01(\v2\x1c.istio.gwxds.RequestRedirectR\x0frequestRedirect\x12Z\n" +
-	"\x17request_header_modifier\x18\a \x01(\v2\".istio.gwxds.RequestHeaderModifierR\x15requestHeaderModifier\"{\n" +
+	"\x17request_header_modifier\x18\a \x01(\v2\".istio.gwxds.RequestHeaderModifierR\x15requestHeaderModifier\x12.\n" +
+	"\x13invalid_backend_ref\x18\b \x01(\bR\x11invalidBackendRef\"{\n" +
 	"\bResource\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x121\n" +
 	"\blistener\x18\x02 \x01(\v2\x15.istio.gwxds.ListenerR\blistener\x12*\n" +

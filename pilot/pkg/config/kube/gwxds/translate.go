@@ -98,24 +98,34 @@ func HTTPRouteRuleToGwRoute(
 		out.Matches = append(out.Matches, httpMatchToRouteMatch(m))
 	}
 
-	for _, b := range rule.BackendRefs {
-		backend := resolveBackend(b.BackendRef, routeNamespace, lookup)
-		if backend != nil {
-			out.Backends = append(out.Backends, backend)
-		}
-	}
-
+	var redirect *gwxdsapi.RequestRedirect
+	var hdrMod *gwxdsapi.RequestHeaderModifier
 	for _, f := range rule.Filters {
 		switch f.Type {
 		case gatewayv1.HTTPRouteFilterRequestRedirect:
 			if f.RequestRedirect != nil {
-				out.RequestRedirect = httpRequestRedirectToProto(f.RequestRedirect)
+				redirect = httpRequestRedirectToProto(f.RequestRedirect)
 			}
 		case gatewayv1.HTTPRouteFilterRequestHeaderModifier:
 			if f.RequestHeaderModifier != nil {
-				out.RequestHeaderModifier = mergeRequestHeaderModifier(out.RequestHeaderModifier, f.RequestHeaderModifier)
+				hdrMod = mergeRequestHeaderModifier(hdrMod, f.RequestHeaderModifier)
 			}
 		}
+	}
+	out.RequestRedirect = redirect
+	out.RequestHeaderModifier = hdrMod
+
+	hadBackendRefs := len(rule.BackendRefs) > 0
+	resolvedBackends := 0
+	for _, b := range rule.BackendRefs {
+		backend := resolveBackend(b.BackendRef, routeNamespace, lookup)
+		if backend != nil {
+			out.Backends = append(out.Backends, backend)
+			resolvedBackends++
+		}
+	}
+	if hadBackendRefs && resolvedBackends == 0 && redirect == nil {
+		out.InvalidBackendRef = true
 	}
 
 	return out
