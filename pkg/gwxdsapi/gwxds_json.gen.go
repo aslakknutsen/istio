@@ -83,6 +83,28 @@ func (this *RequestRedirect) UnmarshalJSON(b []byte) error {
 	return GwxdsUnmarshaler.Unmarshal(bytes.NewReader(b), this)
 }
 
+// MarshalJSON is a custom marshaler for HeaderNameValue
+func (this *HeaderNameValue) MarshalJSON() ([]byte, error) {
+	str, err := GwxdsMarshaler.MarshalToString(this)
+	return []byte(str), err
+}
+
+// UnmarshalJSON is a custom unmarshaler for HeaderNameValue
+func (this *HeaderNameValue) UnmarshalJSON(b []byte) error {
+	return GwxdsUnmarshaler.Unmarshal(bytes.NewReader(b), this)
+}
+
+// MarshalJSON is a custom marshaler for RequestHeaderModifier
+func (this *RequestHeaderModifier) MarshalJSON() ([]byte, error) {
+	str, err := GwxdsMarshaler.MarshalToString(this)
+	return []byte(str), err
+}
+
+// UnmarshalJSON is a custom unmarshaler for RequestHeaderModifier
+func (this *RequestHeaderModifier) UnmarshalJSON(b []byte) error {
+	return GwxdsUnmarshaler.Unmarshal(bytes.NewReader(b), this)
+}
+
 // MarshalJSON is a custom marshaler for RouteMatch
 func (this *RouteMatch) MarshalJSON() ([]byte, error) {
 	str, err := GwxdsMarshaler.MarshalToString(this)

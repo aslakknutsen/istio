@@ -106,13 +106,45 @@ func HTTPRouteRuleToGwRoute(
 	}
 
 	for _, f := range rule.Filters {
-		if f.Type == gatewayv1.HTTPRouteFilterRequestRedirect && f.RequestRedirect != nil {
-			out.RequestRedirect = httpRequestRedirectToProto(f.RequestRedirect)
-			break
+		switch f.Type {
+		case gatewayv1.HTTPRouteFilterRequestRedirect:
+			if f.RequestRedirect != nil {
+				out.RequestRedirect = httpRequestRedirectToProto(f.RequestRedirect)
+			}
+		case gatewayv1.HTTPRouteFilterRequestHeaderModifier:
+			if f.RequestHeaderModifier != nil {
+				out.RequestHeaderModifier = mergeRequestHeaderModifier(out.RequestHeaderModifier, f.RequestHeaderModifier)
+			}
 		}
 	}
 
 	return out
+}
+
+func mergeRequestHeaderModifier(
+	dst *gwxdsapi.RequestHeaderModifier,
+	src *gatewayv1.HTTPHeaderFilter,
+) *gwxdsapi.RequestHeaderModifier {
+	if src == nil {
+		return dst
+	}
+	if dst == nil {
+		dst = &gwxdsapi.RequestHeaderModifier{}
+	}
+	for _, h := range src.Set {
+		dst.Set = append(dst.Set, &gwxdsapi.HeaderNameValue{
+			Name:  string(h.Name),
+			Value: h.Value,
+		})
+	}
+	for _, h := range src.Add {
+		dst.Add = append(dst.Add, &gwxdsapi.HeaderNameValue{
+			Name:  string(h.Name),
+			Value: h.Value,
+		})
+	}
+	dst.Remove = append(dst.Remove, src.Remove...)
+	return dst
 }
 
 func httpRequestRedirectToProto(r *gatewayv1.HTTPRequestRedirectFilter) *gwxdsapi.RequestRedirect {

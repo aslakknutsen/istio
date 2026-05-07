@@ -234,6 +234,87 @@ func (this *RequestRedirect) EqualMessageVT(thatMsg proto.Message) bool {
 	}
 	return this.EqualVT(that)
 }
+func (this *HeaderNameValue) EqualVT(that *HeaderNameValue) bool {
+	if this == that {
+		return true
+	} else if this == nil || that == nil {
+		return false
+	}
+	if this.Name != that.Name {
+		return false
+	}
+	if this.Value != that.Value {
+		return false
+	}
+	return string(this.unknownFields) == string(that.unknownFields)
+}
+
+func (this *HeaderNameValue) EqualMessageVT(thatMsg proto.Message) bool {
+	that, ok := thatMsg.(*HeaderNameValue)
+	if !ok {
+		return false
+	}
+	return this.EqualVT(that)
+}
+func (this *RequestHeaderModifier) EqualVT(that *RequestHeaderModifier) bool {
+	if this == that {
+		return true
+	} else if this == nil || that == nil {
+		return false
+	}
+	if len(this.Set) != len(that.Set) {
+		return false
+	}
+	for i, vx := range this.Set {
+		vy := that.Set[i]
+		if p, q := vx, vy; p != q {
+			if p == nil {
+				p = &HeaderNameValue{}
+			}
+			if q == nil {
+				q = &HeaderNameValue{}
+			}
+			if !p.EqualVT(q) {
+				return false
+			}
+		}
+	}
+	if len(this.Add) != len(that.Add) {
+		return false
+	}
+	for i, vx := range this.Add {
+		vy := that.Add[i]
+		if p, q := vx, vy; p != q {
+			if p == nil {
+				p = &HeaderNameValue{}
+			}
+			if q == nil {
+				q = &HeaderNameValue{}
+			}
+			if !p.EqualVT(q) {
+				return false
+			}
+		}
+	}
+	if len(this.Remove) != len(that.Remove) {
+		return false
+	}
+	for i, vx := range this.Remove {
+		vy := that.Remove[i]
+		if vx != vy {
+			return false
+		}
+	}
+	return string(this.unknownFields) == string(that.unknownFields)
+}
+
+func (this *RequestHeaderModifier) EqualMessageVT(thatMsg proto.Message) bool {
+	that, ok := thatMsg.(*RequestHeaderModifier)
+	if !ok {
+		return false
+	}
+	return this.EqualVT(that)
+}
 func (this *RouteMatch) EqualVT(that *RouteMatch) bool {
 	if this == that {
 		return true
@@ -336,6 +417,9 @@ func (this *Route) EqualVT(that *Route) bool {
 		}
 	}
 	if !this.RequestRedirect.EqualVT(that.RequestRedirect) {
+		return false
+	}
+	if !this.RequestHeaderModifier.EqualVT(that.RequestHeaderModifier) {
 		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
@@ -831,6 +915,119 @@ func (m *RequestRedirect) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error)
 	return len(dAtA) - i, nil
 }
 
+func (m *HeaderNameValue) MarshalVTStrict() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVTStrict(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *HeaderNameValue) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *HeaderNameValue) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if len(m.Value) > 0 {
+		i -= len(m.Value)
+		copy(dAtA[i:], m.Value)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Value)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *RequestHeaderModifier) MarshalVTStrict() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVTStrict(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RequestHeaderModifier) MarshalToVTStrict(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVTStrict(dAtA[:size])
+}
+
+func (m *RequestHeaderModifier) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if len(m.Remove) > 0 {
+		for iNdEx := len(m.Remove) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Remove[iNdEx])
+			copy(dAtA[i:], m.Remove[iNdEx])
+			i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Remove[iNdEx])))
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if len(m.Add) > 0 {
+		for iNdEx := len(m.Add) - 1; iNdEx >= 0; iNdEx-- {
+			size, err := m.Add[iNdEx].MarshalToSizedBufferVTStrict(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if len(m.Set) > 0 {
+		for iNdEx := len(m.Set) - 1; iNdEx >= 0; iNdEx-- {
+			size, err := m.Set[iNdEx].MarshalToSizedBufferVTStrict(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *RouteMatch) MarshalVTStrict() (dAtA []byte, err error) {
 	if m == nil {
 		return nil, nil
@@ -942,6 +1139,16 @@ func (m *Route) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if m.RequestHeaderModifier != nil {
+		size, err := m.RequestHeaderModifier.MarshalToSizedBufferVTStrict(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x3a
 	}
 	if m.RequestRedirect != nil {
 		size, err := m.RequestRedirect.MarshalToSizedBufferVTStrict(dAtA[:i])
@@ -1250,6 +1457,52 @@ func (m *RequestRedirect) SizeVT() (n int) {
 	return n
 }
 
+func (m *HeaderNameValue) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	l = len(m.Value)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	n += len(m.unknownFields)
+	return n
+}
+
+func (m *RequestHeaderModifier) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Set) > 0 {
+		for _, e := range m.Set {
+			l = e.SizeVT()
+			n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+		}
+	}
+	if len(m.Add) > 0 {
+		for _, e := range m.Add {
+			l = e.SizeVT()
+			n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+		}
+	}
+	if len(m.Remove) > 0 {
+		for _, s := range m.Remove {
+			l = len(s)
+			n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+		}
+	}
+	n += len(m.unknownFields)
+	return n
+}
+
 func (m *RouteMatch) SizeVT() (n int) {
 	if m == nil {
 		return 0
@@ -1320,6 +1573,10 @@ func (m *Route) SizeVT() (n int) {
 	}
 	if m.RequestRedirect != nil {
 		l = m.RequestRedirect.SizeVT()
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	if m.RequestHeaderModifier != nil {
+		l = m.RequestHeaderModifier.SizeVT()
 		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	n += len(m.unknownFields)
