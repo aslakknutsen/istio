@@ -326,11 +326,13 @@ func groupOrDefault(rk gatewayv1.RouteGroupKind) gatewayv1.Group {
 	return *rk.Group
 }
 
+// weightOrOne maps Gateway API HTTPBackendRef.Weight to a proto weight.
+// Unspecified (nil) defaults to 1 per Gateway API; explicit 0 means no traffic to that backend.
 func weightOrOne(w *int32) uint32 {
-	if w == nil || *w == 0 {
+	if w == nil {
 		return 1
 	}
-	if *w < 0 {
+	if *w <= 0 {
 		return 0
 	}
 	return uint32(*w)
