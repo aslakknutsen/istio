@@ -531,7 +531,9 @@ type Backend struct {
 	// Set when this backend is an InferencePool.
 	InferencePool *InferencePool `protobuf:"bytes,4,opt,name=inference_pool,json=inferencePool,proto3" json:"inference_pool,omitempty"`
 	// Set when a BackendTLSPolicy applies to this backend.
-	Tls           *BackendTLS `protobuf:"bytes,5,opt,name=tls,proto3" json:"tls,omitempty"`
+	Tls *BackendTLS `protobuf:"bytes,5,opt,name=tls,proto3" json:"tls,omitempty"`
+	// Pod/target port to open upstream connections to when it differs from port (Kubernetes targetPort).
+	DialPort      uint32 `protobuf:"varint,6,opt,name=dial_port,json=dialPort,proto3" json:"dial_port,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -599,6 +601,13 @@ func (x *Backend) GetTls() *BackendTLS {
 		return x.Tls
 	}
 	return nil
+}
+
+func (x *Backend) GetDialPort() uint32 {
+	if x != nil {
+		return x.DialPort
+	}
+	return 0
 }
 
 // RequestRedirect mirrors Gateway API HTTPRequestRedirect for redirect-only rules.
@@ -1080,13 +1089,14 @@ const file_gwxdsapi_gwxds_proto_rawDesc = "" +
 	"clientCert\x12\x1d\n" +
 	"\n" +
 	"client_key\x18\x05 \x01(\fR\tclientKey\x12\x18\n" +
-	"\ainvalid\x18\x06 \x01(\bR\ainvalid\"\xb7\x01\n" +
+	"\ainvalid\x18\x06 \x01(\bR\ainvalid\"\xd4\x01\n" +
 	"\aBackend\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\rR\x04port\x12\x16\n" +
 	"\x06weight\x18\x03 \x01(\rR\x06weight\x12A\n" +
 	"\x0einference_pool\x18\x04 \x01(\v2\x1a.istio.gwxds.InferencePoolR\rinferencePool\x12)\n" +
-	"\x03tls\x18\x05 \x01(\v2\x17.istio.gwxds.BackendTLSR\x03tls\"\x8e\x01\n" +
+	"\x03tls\x18\x05 \x01(\v2\x17.istio.gwxds.BackendTLSR\x03tls\x12\x1b\n" +
+	"\tdial_port\x18\x06 \x01(\rR\bdialPort\"\x8e\x01\n" +
 	"\x0fRequestRedirect\x12\x1a\n" +
 	"\bhostname\x18\x01 \x01(\tR\bhostname\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +

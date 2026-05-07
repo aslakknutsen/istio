@@ -193,6 +193,9 @@ func (this *Backend) EqualVT(that *Backend) bool {
 	if !this.Tls.EqualVT(that.Tls) {
 		return false
 	}
+	if this.DialPort != that.DialPort {
+		return false
+	}
 	return string(this.unknownFields) == string(that.unknownFields)
 }
 
@@ -813,6 +816,11 @@ func (m *Backend) MarshalToSizedBufferVTStrict(dAtA []byte) (int, error) {
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if m.DialPort != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.DialPort))
+		i--
+		dAtA[i] = 0x30
 	}
 	if m.Tls != nil {
 		size, err := m.Tls.MarshalToSizedBufferVTStrict(dAtA[:i])
@@ -1437,6 +1445,9 @@ func (m *Backend) SizeVT() (n int) {
 	if m.Tls != nil {
 		l = m.Tls.SizeVT()
 		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	if m.DialPort != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.DialPort))
 	}
 	n += len(m.unknownFields)
 	return n
