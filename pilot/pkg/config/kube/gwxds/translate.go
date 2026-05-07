@@ -23,7 +23,6 @@ import (
 	"istio.io/istio/pilot/pkg/config/kube/gatewaycommon"
 	gwxdsapi "istio.io/istio/pkg/gwxdsapi"
 	"istio.io/istio/pkg/config/schema/gvk"
-	"istio.io/istio/pkg/ptr"
 )
 
 // GatewayListenerToGwListener translates a resolved gatewaycommon.GatewayListener
@@ -202,17 +201,17 @@ func resolveBackend(
 	}
 	backendName := string(ref.Name)
 
-	// Detect InferencePool backend refs.
-	refGroup := ptr.OrEmpty((*gatewayv1.Group)(ref.Group))
-	refKind := ptr.OrEmpty((*gatewayv1.Kind)(ref.Kind))
-	isPool := refGroup == gatewayv1.Group(gvk.InferencePool.Group) &&
-		refKind == gatewayv1.Kind(gvk.InferencePool.Kind)
+	refGK := gatewaycommon.NormalizeReference((*gatewayv1.Group)(ref.Group), (*gatewayv1.Kind)(ref.Kind), gvk.Service)
 
-	if isPool {
+	if refGK.Group == gvk.InferencePool.Group && refGK.Kind == gvk.InferencePool.Kind {
 		return resolveInferencePoolBackend(backendName, backendNS, weightOrOne(ref.Weight), lookup)
 	}
 
-	// Ordinary Service backend.
+	// Ordinary Kubernetes Service backend only (unknown kinds are invalid).
+	if refGK.Group != gvk.Service.Group || refGK.Kind != gvk.Service.Kind {
+		return nil
+	}
+
 	if ref.Port == nil {
 		return nil
 	}

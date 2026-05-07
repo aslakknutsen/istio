@@ -37,24 +37,34 @@ func registerRouteStatuses(
 	tagWatcher krt.RecomputeProtected[revisions.TagWatcher],
 	opts krt.OptionsBuilder,
 ) {
-	emptyHTTP := func(yield func(struct{}, *gatewaycommon.Condition) bool) {}
+	// Use string (not struct{}) for the discarded RouteStatusManyCollection outputs: krt.GetKey
+	// must be defined for each emitted object (see krt/helpers.go).
 	httpRouteStatus, _ := gatewaycommon.RouteStatusManyCollection(httpRoutes, inputs, opts, "gwxds/HTTPRoutes",
-		func(ctx gatewaycommon.RouteContext, _ *gatewayv1.HTTPRoute) (gatewaycommon.RouteContext, iter.Seq2[struct{}, *gatewaycommon.Condition]) {
-			return ctx, emptyHTTP
+		func(ctx gatewaycommon.RouteContext, obj *gatewayv1.HTTPRoute) (gatewaycommon.RouteContext, iter.Seq2[string, *gatewaycommon.Condition]) {
+			routeKey := obj.Namespace + "/" + obj.Name
+			return ctx, func(yield func(string, *gatewaycommon.Condition) bool) {
+				yield(routeKey, validateHTTPRouteBackends(ctx, obj))
+			}
 		},
-		func(_ struct{}, _ gatewaycommon.RouteParentReference) struct{} { return struct{}{} },
+		func(routeKey string, parent gatewaycommon.RouteParentReference) string {
+			return routeKey + "/" + parent.InternalName
+		},
 		func(status gatewayv1.RouteStatus) gatewayv1.HTTPRouteStatus {
 			return gatewayv1.HTTPRouteStatus{RouteStatus: status}
 		},
 	)
 	status.RegisterStatus(queue, httpRouteStatus, GetStatus, tagWatcher.AccessUnprotected())
 
-	emptyGRPC := func(yield func(struct{}, *gatewaycommon.Condition) bool) {}
 	grpcRouteStatus, _ := gatewaycommon.RouteStatusManyCollection(grpcRoutes, inputs, opts, "gwxds/GRPCRoutes",
-		func(ctx gatewaycommon.RouteContext, _ *gatewayv1.GRPCRoute) (gatewaycommon.RouteContext, iter.Seq2[struct{}, *gatewaycommon.Condition]) {
-			return ctx, emptyGRPC
+		func(ctx gatewaycommon.RouteContext, obj *gatewayv1.GRPCRoute) (gatewaycommon.RouteContext, iter.Seq2[string, *gatewaycommon.Condition]) {
+			routeKey := obj.Namespace + "/" + obj.Name
+			return ctx, func(yield func(string, *gatewaycommon.Condition) bool) {
+				yield(routeKey, validateGRPCRouteBackends(ctx, obj))
+			}
 		},
-		func(_ struct{}, _ gatewaycommon.RouteParentReference) struct{} { return struct{}{} },
+		func(routeKey string, parent gatewaycommon.RouteParentReference) string {
+			return routeKey + "/" + parent.InternalName
+		},
 		func(status gatewayv1.RouteStatus) gatewayv1.GRPCRouteStatus {
 			return gatewayv1.GRPCRouteStatus{RouteStatus: status}
 		},
