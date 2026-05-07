@@ -21,7 +21,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gateway "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -313,23 +312,6 @@ func (c *Controller) buildCollections(inputs *GwXdsInputs, domainSuffix string, 
 			PoolByKey: func(key string) *inferencev1.InferencePool {
 				return ptr.Flatten(krt.FetchOne(krtctx, inputs.InferencePools,
 					krt.FilterKey(key)))
-			},
-			TargetDialPort: func(ns, name string, servicePort int32) (uint32, bool) {
-				svc := ptr.Flatten(krt.FetchOne(krtctx, inputs.Services,
-					krt.FilterObjectName(types.NamespacedName{Namespace: ns, Name: name})))
-				if svc == nil {
-					return 0, false
-				}
-				for _, p := range svc.Spec.Ports {
-					if p.Port != servicePort {
-						continue
-					}
-					if p.TargetPort.Type == intstr.Int {
-						return uint32(p.TargetPort.IntVal), true
-					}
-					return 0, false
-				}
-				return 0, false
 			},
 			// TLSByHost receives "namespace/expanded-hostname" matching the index key.
 			TLSByHost: func(key string) *gatewaycommon.ResolvedBackendTLS {

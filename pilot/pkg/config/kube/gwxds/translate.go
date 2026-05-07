@@ -67,8 +67,6 @@ type BackendLookup struct {
 	// TLSByHost returns the resolved BackendTLS policy for a given "namespace/expanded-hostname"
 	// key, or nil. The hostname is the FQDN already expanded with DomainSuffix.
 	TLSByHost func(key string) *gatewaycommon.ResolvedBackendTLS
-	// TargetDialPort resolves Kubernetes Service.spec.ports[].targetPort for a numeric service Port.
-	TargetDialPort func(namespace, name string, servicePort int32) (uint32, bool)
 	// DomainSuffix is used to expand service hostnames.
 	DomainSuffix string
 }
@@ -218,17 +216,12 @@ func resolveBackend(
 	if ref.Port == nil {
 		return nil
 	}
-	svcPort := int32(*ref.Port)
 	backend := &gwxdsapi.Backend{
 		Host:   fmt.Sprintf("%s.%s.svc.%s", backendName, backendNS, lookup.DomainSuffix),
 		Port:   uint32(*ref.Port),
 		Weight: weightOrOne(ref.Weight),
 	}
-	if lookup.TargetDialPort != nil {
-		if dial, ok := lookup.TargetDialPort(backendNS, backendName, svcPort); ok && dial != 0 && dial != backend.Port {
-			backend.DialPort = dial
-		}
-	}
+	// Omit DialPort: use backendRef port only (same as agentgateway; ClusterIP VIP + targetPort is wrong).
 	if lookup.TLSByHost != nil {
 		if tls := lookup.TLSByHost(backendNS + "/" + backend.Host); tls != nil {
 			backend.Tls = resolvedTLSToBackendTLS(tls)
